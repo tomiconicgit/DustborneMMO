@@ -50,17 +50,19 @@ export default class LoadingManager {
             this._updateProgress(`Initializing: ${task.name}`, progress);
             
             const module = this.loadedModules.get(task.path);
-            if (!module || !module.default) {
-                return this.fail(new Error(`Module not found or has no default export for ${task.name}`));
+            if (!module) {
+                return this.fail(new Error(`Module not found for ${task.name}`));
             }
 
             const ModuleClass = module.default;
-            if (typeof ModuleClass.create === 'function') {
+            if (ModuleClass && typeof ModuleClass.create === 'function') {
                 try {
                     await ModuleClass.create();
                 } catch (err) {
                     return this.fail(err, task);
                 }
+            } else {
+                Debugger.log(`Skipping initialization for ${task.name} (no create method)`);
             }
         }
 
