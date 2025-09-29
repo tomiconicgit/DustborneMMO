@@ -21,9 +21,6 @@ export default class EngineSetup {
       // Player
       { name: 'Character',        path: paths.character },
 
-      // Atmosphere ring (after terrain/character so it sits around the edge)
-      { name: 'HorizonFog',       path: paths.horizonFog },
-
       // Dev tools
       { name: 'GridToggle',       path: paths.devGrid },
     ];
