@@ -1,5 +1,5 @@
 // file: src/debugger.js
-import { Stats } from 'three/addons/libs/stats.module.js';
+import Stats from 'three/addons/libs/stats.module.js';
 
 let stats;
 
