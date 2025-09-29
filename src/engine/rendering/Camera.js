@@ -27,10 +27,11 @@ export default class Camera {
     this.target        = null;
     this.orbitAngle    = Math.PI / 4;
     this.orbitDistance = 6;
-    this.cameraHeight  = 3;
+    this.minCameraHeight  = 3;
+    this.maxCameraHeight  = 6;
 
     this.minDistance = 4;
-    this.maxDistance = 12;
+    this.maxDistance = 9;
 
     new CameraController(window, this);
 
