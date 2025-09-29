@@ -6,7 +6,6 @@ export default class LoadingManager {
     constructor() {
         this.hasFailed = false;
         this.loadedModules = new Map();
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
         try {
             this._createDOM();
@@ -28,23 +27,26 @@ export default class LoadingManager {
         }
 
         // Phase 1: Load all module files
-        await this._appendTerminalLine('Loading assets...');
+        this._updateProgress('Loading assets...', 0);
         for (let i = 0; i < manifest.length; i++) {
             const task = manifest[i];
-            await this._appendTerminalLine(`Loading: ${task.name}`);
+            const progress = ((i + 1) / manifest.length) * 50;
+            this._updateProgress(`Loading: ${task.name}`, progress);
             try {
                 const mod = await import(task.path);
                 this.loadedModules.set(task.path, mod);
             } catch (err) {
                 return this.fail(err, task);
             }
+            await new Promise(resolve => setTimeout(resolve, 200)); // Slight delay for visibility
         }
         
         // Phase 2: Initialize modules in order
-        await this._appendTerminalLine('Initializing systems...');
+        this._updateProgress('Initializing systems...', 50);
         for (let i = 0; i < manifest.length; i++) {
             const task = manifest[i];
-            await this._appendTerminalLine(`Initializing: ${task.name}`);
+            const progress = 50 + ((i + 1) / manifest.length) * 50;
+            this._updateProgress(`Initializing: ${task.name}`, progress);
             
             const module = this.loadedModules.get(task.path);
             if (!module) {
@@ -61,40 +63,18 @@ export default class LoadingManager {
             } else {
                 Debugger.log(`Skipping initialization for ${task.name} (no create method)`);
             }
+            await new Promise(resolve => setTimeout(resolve, 200)); // Slight delay for visibility
         }
 
-        await this._appendTerminalLine('Ready');
+        this._updateProgress('Ready', 100, true);
         this._showStartButton();
-    }
-
-    async _appendTerminalLine(message) {
-        if (this.hasFailed) return;
-        const line = document.createElement('p');
-        line.className = 'terminal-line';
-        line.textContent = message;
-        this.terminalOutput.appendChild(line);
-        this._playBeep();
-        // Trigger typing animation (CSS handles it)
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay for typing
-    }
-
-    _playBeep() {
-        const oscillator = this.audioContext.createOscillator();
-        oscillator.type = 'square';
-        oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime); // A4 note
-        oscillator.connect(this.audioContext.destination);
-        oscillator.start();
-        setTimeout(() => oscillator.stop(), 100);
     }
 
     _showStartButton() {
         if (this.hasFailed) return;
         this.startButton.disabled = false;
-        this.startButton.addEventListener('click', () => {
-            Viewport.instance?.beginRenderLoop();
-            this.loadingScreen.classList.add('fade-out');
-            setTimeout(() => this.loadingScreen.remove(), 1000);
-        }, { once: true });
+        this.startButton.style.backgroundColor = '#d2a679'; // Active color
+        this.startButton.style.color = '#fff';
     }
 
     fail(error, task = {}) {
@@ -106,10 +86,12 @@ export default class LoadingManager {
         
         Debugger.error(errorMessage, error.stack);
         
-        const errorLine = document.createElement('p');
-        errorLine.className = 'terminal-line error';
-        errorLine.textContent = 'Fatal Error: ' + errorMessage;
-        this.terminalOutput.appendChild(errorLine);
+        if (this.statusElement) {
+            this.statusElement.textContent = 'Fatal Error';
+            this.progressBar.style.width = '100%';
+            this.progressBar.style.backgroundColor = '#c94a4a';
+            this.percentEl.textContent = 'FAIL';
+        }
 
         if (this.errorDetails) {
             this.errorDetails.style.display = 'block';
@@ -124,30 +106,40 @@ export default class LoadingManager {
         }
     }
 
+    _updateProgress(message, progress, isComplete = false) {
+        if (this.hasFailed) return;
+        this.statusElement.textContent = message;
+        const pct = Math.floor(Math.min(100, progress));
+        this.progressBar.style.width = `${pct}%`;
+        this.percentEl.textContent = `${pct}%`;
+        if (isComplete) {
+            this.progressBar.style.backgroundColor = '#64b964';
+        }
+    }
+
     _cacheDOMElements() {
         this.loadingScreen = document.getElementById('game-loading-screen');
-        this.terminalOutput = document.getElementById('terminal-output');
+        this.progressBar = document.getElementById('game-loading-bar-fill');
+        this.percentEl = document.getElementById('game-loading-percent');
+        this.statusElement = document.getElementById('game-loading-status');
         this.startButton = document.getElementById('game-start-button');
         this.errorDetails = document.getElementById('error-details');
     }
 
     _createDOM() {
         const style = `
-            #game-loading-screen { position: fixed; inset: 0; background-color: #000; z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: 'VT323', monospace; color: #0f0; transition: opacity 1s ease; }
+            #game-loading-screen { position: fixed; inset: 0; background: linear-gradient(to bottom, #f4a460, #c2b280); z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: sans-serif; color: #fff; transition: opacity 1s ease; }
             #game-loading-screen.fade-out { opacity: 0; pointer-events: none; }
-            #game-loading-content { width: 90%; max-width: 800px; height: 90%; position: relative; border: 2px solid #0f0; padding: 1em; box-shadow: 0 0 10px #0f0; }
-            h1 { color: #0f0; text-align: center; animation: flicker 0.15s infinite; }
-            #terminal-output { height: 70%; overflow-y: auto; }
-            .terminal-line { margin: 0; white-space: pre; animation: typing 1s steps(40, end), blink-caret 0.75s step-end infinite; overflow: hidden; border-right: .15em solid #0f0; }
-            .terminal-line.error { color: #f00; }
-            @keyframes typing { from { width: 0; } to { width: 100%; } }
-            @keyframes blink-caret { from, to { border-color: transparent; } 50% { border-color: #0f0; } }
-            @keyframes flicker { 50% { opacity: 0.5; } }
-            .scanline { width: 100%; height: 2px; background: rgba(255,255,255,0.2); position: absolute; top: 0; animation: scanline 6s linear infinite; }
-            @keyframes scanline { 0% { top: -2px; } 100% { top: 100%; } }
-            #game-start-button { padding: 10px 20px; font-size: 24px; background-color: #000; color: #0f0; border: 1px solid #0f0; cursor: pointer; display: block; margin: 1em auto; }
-            #game-start-button:disabled { color: #333; border-color: #333; cursor: not-allowed; }
-            #error-details { display: none; margin-top: 2em; text-align: left; background: #111; padding: 1em; border: 1px solid #f00; color: #f00; max-height: 200px; overflow: auto; }
+            #game-loading-content { width: 90%; max-width: 400px; text-align: center; position: relative; top: -5%; } /* Tad above center */
+            h1 { font-family: 'Cinzel', serif; font-size: 3em; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.3); margin-bottom: 0.5em; }
+            #game-loading-bar-container { width: 100%; height: 8px; background-color: rgba(255,255,255,0.3); border-radius: 4px; overflow: hidden; margin: 1em 0; position: relative; }
+            #game-loading-bar-fill { height: 100%; background-color: #fff; transition: width 0.3s ease, background-color 0.3s ease; }
+            #game-loading-percent { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 0px; color: #333; } /* Hidden, but if needed visible inside */
+            #game-loading-status { margin-bottom: 1em; font-size: 1em; color: #fff; text-shadow: 0 0 5px rgba(0,0,0,0.2); }
+            #game-start-button { padding: 10px 20px; font-size: 1.2em; background-color: #a08d6e; color: #ddd; border: none; border-radius: 5px; cursor: not-allowed; opacity: 0.6; }
+            #game-start-button:disabled { background-color: #a08d6e; opacity: 0.6; cursor: not-allowed; }
+            #error-details { display: none; margin-top: 2em; text-align: left; background: rgba(0,0,0,0.5); padding: 1em; border-radius: 5px; color: #fff; max-height: 300px; overflow: auto; }
+            #error-details pre { white-space: pre-wrap; word-wrap: break-word; }
         `;
         document.head.insertAdjacentHTML('beforeend', `<style>${style}</style>`);
         
@@ -155,8 +147,11 @@ export default class LoadingManager {
             <div id="game-loading-screen">
                 <div id="game-loading-content">
                     <h1>Duneborne</h1>
-                    <div class="scanline"></div>
-                    <div id="terminal-output"></div>
+                    <div id="game-loading-bar-container">
+                        <div id="game-loading-bar-fill"></div>
+                        <span id="game-loading-percent">0%</span>
+                    </div>
+                    <p id="game-loading-status">Initializing...</p>
                     <button id="game-start-button" disabled>Start</button>
                     <div id="error-details"></div>
                 </div>
