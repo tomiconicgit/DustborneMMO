@@ -1,0 +1,22 @@
+// file: src/game/EngineSetup.js
+import paths from '../router.js';
+
+export default class EngineSetup {
+    getManifest() {
+        return [
+            // Core Engine - Order is important here!
+            { name: 'Scene', path: paths.scene },
+            { name: 'Camera', path: paths.camera },
+            { name: 'Viewport', path: paths.viewport },
+            { name: 'Lighting', path: paths.lighting },
+            { name: 'Sky', path: paths.sky },
+            { name: 'SoundManager', path: paths.soundManager },
+
+            // World Generation
+            { name: 'WorldMap', path: paths.worldMap },
+            { name: 'TerrainGenerator', path: paths.terrainGenerator },
+            { name: 'StaticObjectMap', path: paths.staticObjectMap },
+            { name: 'ChunkManager', path: paths.chunkManager },
+        ];
+    }
+}
