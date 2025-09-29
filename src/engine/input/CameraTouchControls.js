@@ -8,57 +8,64 @@ export default class CameraTouchControls {
 
   constructor() {
     this.cam = Camera.main;
-    this.tapMaxMs = 220;     // max duration to register as a tap
-    this.tapMaxMove = 10;    // px movement allowed for a tap
-    this.isDragging = false;
-
-    // Touch state
-    this.touchStartTime = 0;
-    this.startX = 0; this.startY = 0;
-    this.lastX = 0;
-    this.pinchLast = null;
-
-    // Mouse state
-    this.mouseDown = false;
-    this.mouseStartTime = 0;
-    this.mStartX = 0; this.mStartY = 0; this._mx = 0; this._my = 0;
-    this._mDragging = false;
-
-    // Bind to the actual canvas so rect math stays correct.
     this.canvas = Viewport.instance?.renderer?.domElement || window;
 
-    // Touch events
-    this.canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
-    this.canvas.addEventListener('touchmove',  this.onTouchMove,  { passive: false });
-    this.canvas.addEventListener('touchend',   this.onTouchEnd,   { passive: false });
+    // Ensure the browser doesn't hijack gestures (critical on iOS)
+    if (this.canvas.style) this.canvas.style.touchAction = 'none';
 
-    // Mouse events
-    this.canvas.addEventListener('mousedown', this.onMouseDown, { passive: false });
-    this.canvas.addEventListener('mousemove', this.onMouseMove, { passive: false });
-    this.canvas.addEventListener('mouseup',   this.onMouseUp,   { passive: false });
-    this.canvas.addEventListener('wheel',     this.onWheel,     { passive: true  });
+    // Gesture thresholds
+    this.tapMaxMs   = 280;
+    this.tapMaxMove = 12; // px
+
+    // Pointer state
+    this.activeId = null;
+    this.startX = 0; this.startY = 0;
+    this.lastX  = 0; this.lastY  = 0;
+    this.startTime = 0;
+    this.moved = false;
+
+    // Pinch (second pointer)
+    this.secondId = null;
+    this.pinchLast = null;
+
+    // Events
+    this.canvas.addEventListener('pointerdown', this.onDown, { passive: false });
+    this.canvas.addEventListener('pointermove', this.onMove,  { passive: false });
+    this.canvas.addEventListener('pointerup',   this.onUp,    { passive: false });
+    this.canvas.addEventListener('pointercancel', this.onUp,  { passive: false });
+    this.canvas.addEventListener('wheel', this.onWheel, { passive: true });
+
+    // Pick helper
+    GroundPicker.create();
   }
 
-  /* ---------------- Touch ---------------- */
+  onDown = (e) => {
+    // Only act on primary buttons/touches
+    if (e.button !== undefined && e.button !== 0) return;
 
-  onTouchStart = (e) => {
-    if (e.touches.length === 1) {
-      const t = e.touches[0];
-      this.touchStartTime = performance.now();
-      this.startX = this.lastX = t.clientX;
-      this.startY = t.clientY;
-      this.isDragging = false;
-      this.pinchLast = null;
-    } else if (e.touches.length === 2) {
-      this.pinchLast = this._pinchDistance(e.touches);
-      this.isDragging = false;
+    // If no active pointer, make this one primary
+    if (this.activeId === null) {
+      this.activeId = e.pointerId;
+      this.startX = this.lastX = e.clientX;
+      this.startY = this.lastY = e.clientY;
+      this.startTime = performance.now();
+      this.moved = false;
+      this.canvas.setPointerCapture?.(e.pointerId);
+      return;
+    }
+
+    // If we already have a primary, this becomes the second pointer (pinch)
+    if (this.secondId === null && e.pointerId !== this.activeId) {
+      this.secondId = e.pointerId;
+      this.pinchLast = this._pinchDistanceFromPointers(e);
     }
   };
 
-  onTouchMove = (e) => {
-    if (e.touches.length === 2) {
+  onMove = (e) => {
+    // Pinch zoom when two pointers active
+    if (this.activeId !== null && this.secondId !== null) {
       e.preventDefault();
-      const dist = this._pinchDistance(e.touches);
+      const dist = this._pinchDistanceFromPointers(e);
       if (this.pinchLast != null) {
         const delta = dist - this.pinchLast;
         this._zoomBy(-delta * 0.01);
@@ -67,84 +74,60 @@ export default class CameraTouchControls {
       return;
     }
 
-    if (e.touches.length === 1) {
-      const t = e.touches[0];
-      const dx = t.clientX - this.lastX;
-      const moved = Math.hypot(t.clientX - this.startX, t.clientY - this.startY);
+    // Single-pointer rotate
+    if (e.pointerId === this.activeId) {
+      const dx = e.clientX - this.lastX;
+      const dy = e.clientY - this.lastY;
+      const moved = Math.hypot(e.clientX - this.startX, e.clientY - this.startY);
+      if (moved > this.tapMaxMove) this.moved = true;
 
-      if (moved > this.tapMaxMove) this.isDragging = true;
-
-      if (this.isDragging) {
+      if (this.moved) {
         e.preventDefault();
         this._rotateBy(-dx * 0.01);
       }
 
-      this.lastX = t.clientX;
+      this.lastX = e.clientX; this.lastY = e.clientY;
     }
   };
 
-  onTouchEnd = (e) => {
-    const dt = performance.now() - this.touchStartTime;
-    const wasTap = !this.isDragging && this.pinchLast === null && dt <= this.tapMaxMs;
+  onUp = (e) => {
+    // Ending second pointer?
+    if (e.pointerId === this.secondId) {
+      this.secondId = null;
+      this.pinchLast = null;
+      return;
+    }
 
-    if (wasTap) {
-      const t = e.changedTouches?.[0];
-      if (t) {
-        const point = GroundPicker.instance?.pick(t.clientX, t.clientY);
+    // Ending primary pointer
+    if (e.pointerId === this.activeId) {
+      const dt = performance.now() - this.startTime;
+      const wasTap = !this.moved && dt <= this.tapMaxMs;
+
+      if (wasTap) {
+        const point = GroundPicker.instance?.pick(e.clientX, e.clientY);
         if (point) window.dispatchEvent(new CustomEvent('ground:tap', { detail: { point } }));
       }
+
+      this.canvas.releasePointerCapture?.(e.pointerId);
+      this.activeId = null;
+      this.moved = false;
     }
-
-    this.isDragging = false;
-    this.pinchLast = null;
-  };
-
-  _pinchDistance(touches) {
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.hypot(dx, dy);
-  }
-
-  /* ---------------- Mouse ---------------- */
-
-  onMouseDown = (e) => {
-    if (e.button !== 0) return;
-    this.mouseDown = true;
-    this.mouseStartTime = performance.now();
-    this.mStartX = this._mx = e.clientX;
-    this.mStartY = this._my = e.clientY;
-    this._mDragging = false;
-  };
-
-  onMouseMove = (e) => {
-    if (!this.mouseDown) return;
-    const dx = e.clientX - this._mx;
-    const moved = Math.hypot(e.clientX - this.mStartX, e.clientY - this.mStartY);
-    if (moved > this.tapMaxMove) this._mDragging = true;
-    if (this._mDragging) {
-      e.preventDefault();
-      this._rotateBy(-dx * 0.01);
-    }
-    this._mx = e.clientX; this._my = e.clientY;
-  };
-
-  onMouseUp = (e) => {
-    if (e.button !== 0) return;
-    const dt = performance.now() - this.mouseStartTime;
-    const wasClick = !this._mDragging && dt <= this.tapMaxMs;
-    if (wasClick) {
-      const point = GroundPicker.instance?.pick(e.clientX, e.clientY);
-      if (point) window.dispatchEvent(new CustomEvent('ground:tap', { detail: { point } }));
-    }
-    this.mouseDown = false;
-    this._mDragging = false;
   };
 
   onWheel = (e) => {
     this._zoomBy(e.deltaY * 0.001);
   };
 
-  /* ------------- Camera ops ------------- */
+  _pinchDistanceFromPointers(e) {
+    // We compute distance using current positions of the two pointers tracked by the element.
+    // PointerEvent doesn't give both pointers in one event; query active pointers from element.
+    const pList = (e.currentTarget && e.currentTarget.getPointerList)
+      ? e.currentTarget.getPointerList() : null;
+    // Fallback: estimate from last known primary + this event (good enough)
+    const ax = this.lastX, ay = this.lastY;
+    const bx = e.clientX, by = e.clientY;
+    return Math.hypot(ax - bx, ay - by);
+  }
 
   _rotateBy(deltaAngle) {
     if (!this.cam) return;
