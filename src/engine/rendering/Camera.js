@@ -1,7 +1,6 @@
 // file: src/engine/rendering/Camera.js
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import Viewport from '../core/Viewport.js';
 
 let cameraInstance = null;
 
@@ -15,14 +14,17 @@ export default class Camera {
             cameraInstance.position.set(20, 25, 20);
             cameraInstance.lookAt(0, 0, 0);
             Camera.main = cameraInstance;
-            
-            // Wait for Viewport to exist before adding controls
-            setTimeout(() => {
-                if (Viewport.instance?.renderer) {
-                    Camera.controls = new OrbitControls(Camera.main, Viewport.instance.renderer.domElement);
-                    Camera.controls.enableDamping = true;
-                }
-            }, 0);
+        }
+    }
+
+    /**
+     * A new, reliable method to add controls after the viewport exists.
+     * @param {HTMLElement} domElement The canvas element from the renderer.
+     */
+    static addControls(domElement) {
+        if (Camera.main && domElement) {
+            Camera.controls = new OrbitControls(Camera.main, domElement);
+            Camera.controls.enableDamping = true;
         }
     }
 }
