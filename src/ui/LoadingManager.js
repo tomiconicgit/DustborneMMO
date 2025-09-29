@@ -82,6 +82,7 @@ export default class LoadingManager {
         if (this.hasFailed) return;
         this.hasFailed = true;
         const taskName = task.name || 'Unnamed Task';
+        const taskModule = task.module || task.path || 'Unknown';
         const errorMessage = `Failed during [${taskName}]: ${error.message}`;
         
         Debugger.error(errorMessage, error.stack);
@@ -91,6 +92,19 @@ export default class LoadingManager {
             this.progressBar.style.width = '100%';
             this.progressBar.style.backgroundColor = '#c94a4a';
             this.percentEl.textContent = 'FAIL';
+        }
+
+        // Advanced error display on loading screen
+        if (this.errorDetails) {
+            this.errorDetails.style.display = 'block';
+            this.errorDetails.innerHTML = `
+                <h2>Error Details:</h2>
+                <p><strong>Error Message:</strong> ${error.message}</p>
+                <p><strong>Affected File/Module:</strong> ${taskModule} (${taskName})</p>
+                <p><strong>Possible Cause:</strong> This could be due to a module import failure, missing export, network issue loading a file, or runtime error in initialization. Check if paths are correct, dependencies exist, and no syntax errors in the file.</p>
+                <p><strong>Stack Trace:</strong><pre>${error.stack || 'No stack trace available'}</pre></p>
+                <p><strong>Helpful Tips:</strong> Open browser console (F12) for full logs. Check Network tab for failed requests. Verify import paths in Router.js. Ensure Three.js CDN is accessible. Restart server or clear cache if needed.</p>
+            `;
         }
     }
 
@@ -111,7 +125,8 @@ export default class LoadingManager {
             'game-loading-bar-fill',
             'game-loading-percent',
             'game-loading-status',
-            'game-start-button'
+            'game-start-button',
+            'error-details' // Added for advanced error display
         ];
         
         for (const id of requiredIds) {
@@ -127,6 +142,7 @@ export default class LoadingManager {
         this.percentEl = document.getElementById('game-loading-percent');
         this.statusElement = document.getElementById('game-loading-status');
         this.startButton = document.getElementById('game-start-button');
+        this.errorDetails = document.getElementById('error-details');
     }
 
     _createDOM() {
@@ -135,12 +151,14 @@ export default class LoadingManager {
             #game-loading-screen.fade-out { opacity: 0; pointer-events: none; }
             #game-loading-content { width: 90%; max-width: 400px; text-align: center; }
             h1 { color: #e88b33; }
-            #game-loading-bar-container { width: 100%; height: 8px; background-color: #333; border-radius: 4px; overflow: hidden; margin: 1em 0; position: relative; }
+            #game-loading-bar-container { width: 100%; height: 20px; background-color: #333; border-radius: 4px; overflow: hidden; margin: 1em 0; position: relative; }
             #game-loading-bar-fill { width: 0%; height: 100%; background-color: #e88b33; transition: width 0.3s ease, background-color 0.3s ease; }
             #game-loading-percent { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 10px; color: white; text-shadow: 1px 1px 1px #000; }
             #game-loading-status { margin-bottom: 1.5em; height: 1.2em; }
             #game-start-button { padding: 10px 20px; font-size: 16px; background-color: #e88b33; color: #1a1612; border: none; border-radius: 5px; cursor: pointer; }
             #game-start-button:disabled { background-color: #555; cursor: not-allowed; }
+            #error-details { display: none; margin-top: 2em; text-align: left; background: #333; padding: 1em; border-radius: 5px; max-height: 300px; overflow: auto; }
+            #error-details pre { white-space: pre-wrap; word-wrap: break-word; }
         `;
         document.head.insertAdjacentHTML('beforeend', `<style>${style}</style>`);
         
@@ -148,13 +166,14 @@ export default class LoadingManager {
         document.body.insertAdjacentHTML('afterbegin', `
             <div id="game-loading-screen">
                 <div id="game-loading-content">
-                    <h1>Loading Game</h1>
+                    <h1>Duneborne</h1>
                     <p id="game-loading-status">Initializing...</p>
                     <div id="game-loading-bar-container">
                         <div id="game-loading-bar-fill"></div>
                         <span id="game-loading-percent">0%</span>
                     </div>
                     <button id="game-start-button" disabled>Start</button>
+                    <div id="error-details"></div>
                 </div>
             </div>
         `);
