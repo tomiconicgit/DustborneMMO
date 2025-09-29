@@ -1,161 +1,213 @@
 // file: src/ui/LoadingManager.js
-import Viewport from '../engine/core/Viewport.js';
 import Debugger from '../debugger.js';
+import Viewport from '../engine/core/Viewport.js';
 
 export default class LoadingManager {
-    constructor() {
-        this.hasFailed = false;
-        this.loadedModules = new Map();
-        
+  constructor() {
+    this.hasFailed = false;
+    this.loadedModules = new Map();
+    this.engineInstance = null;
+
+    try {
+      this._buildOverlayDOM();     // Build launcher + loading screens
+      this._cacheDOMElements();    // Grab references
+      Debugger.log('Loading Manager initialized (launcher style).');
+    } catch (err) {
+      this.hasFailed = true;
+      Debugger.error('Failed to build launcher/loading UI.', err);
+      document.body.innerHTML = `<div style="color: #f66; font-family: sans-serif; padding: 2em;">Critical Error: UI failed to build. See console.</div>`;
+    }
+  }
+
+  /**
+   * Starts the launcher flow. We render the launcher first.
+   * When "Start Game" is clicked, we begin actual module loading + init.
+   */
+  async start(engineInstance) {
+    if (this.hasFailed) return;
+    this.engineInstance = engineInstance;
+
+    // Show launcher screen initially
+    this._show(this.launcherScreen);
+    this._hide(this.loadingScreen);
+
+    // Wire actions
+    this.startGameBtn.addEventListener('click', () => {
+      // Flip to loading UI and begin the real boot
+      this._hide(this.launcherScreen);
+      this._show(this.loadingScreen);
+      this._beginBoot();
+    });
+
+    // Optional: other buttons are placeholders to match exact layout
+    this.optionsBtn?.addEventListener('click', () => {
+      Debugger.log('Options clicked (placeholder).');
+    });
+    this.exitBtn?.addEventListener('click', () => {
+      Debugger.log('Exit clicked (placeholder).');
+    });
+  }
+
+  async _beginBoot() {
+    if (this.hasFailed) return;
+
+    const manifest = this.engineInstance?.getManifest?.();
+    if (!manifest || manifest.length === 0) {
+      return this.fail(new Error('Manifest is empty or invalid.'));
+    }
+
+    // Phase 1: Fetch all modules
+    this._setStatus('Initializing game engine...');
+    this._setProgress(0);
+
+    for (let i = 0; i < manifest.length; i++) {
+      const task = manifest[i];
+      const progress = ((i + 1) / manifest.length) * 45; // first half
+      this._setStatus(`Loading: ${task.name}`);
+      this._setProgress(progress);
+      try {
+        const mod = await import(task.path);
+        this.loadedModules.set(task.path, mod);
+      } catch (err) {
+        return this.fail(err, task);
+      }
+    }
+
+    // Phase 2: Initialize in order
+    for (let i = 0; i < manifest.length; i++) {
+      const task = manifest[i];
+      const progress = 45 + ((i + 1) / manifest.length) * 55; // 45..100
+      this._setStatus(`Initializing: ${task.name}`);
+      this._setProgress(progress);
+
+      const module = this.loadedModules.get(task.path);
+      if (!module) {
+        return this.fail(new Error(`Module not found for ${task.name}`), task);
+      }
+      const ModuleClass = module.default;
+      if (ModuleClass && typeof ModuleClass.create === 'function') {
         try {
-            this._createDOM();
-            this._cacheDOMElements();
-            Debugger.log('Loading Manager initialized.');
+          await ModuleClass.create();
         } catch (err) {
-            this.hasFailed = true;
-            Debugger.error('Failed to create or cache loading screen DOM.', err);
-            document.body.innerHTML = `<div style="color: red; font-family: sans-serif; padding: 2em;">Critical Error: Loading UI failed to build. Check the console.</div>`;
+          return this.fail(err, task);
         }
+      } else {
+        Debugger.log(`Skipping initialization for ${task.name} (no create method)`);
+      }
     }
 
-    async start(engineInstance) {
-        if (this.hasFailed) return;
+    // Done
+    this._setStatus('Finalizing...');
+    this._setProgress(100);
 
-        const manifest = engineInstance.getManifest();
-        if (!manifest || manifest.length === 0) {
-            return this.fail(new Error('Manifest is empty or invalid.'));
-        }
-
-        // Phase 1: Load all module files
-        this._updateProgress('Loading assets...', 0);
-        for (let i = 0; i < manifest.length; i++) {
-            const task = manifest[i];
-            const progress = ((i + 1) / manifest.length) * 50;
-            this._updateProgress(`Loading: ${task.name}`, progress);
-            try {
-                const mod = await import(task.path);
-                this.loadedModules.set(task.path, mod);
-            } catch (err) {
-                return this.fail(err, task);
-            }
-            await new Promise(resolve => setTimeout(resolve, 200)); // Slight delay for visibility
-        }
-        
-        // Phase 2: Initialize modules in order
-        this._updateProgress('Initializing systems...', 50);
-        for (let i = 0; i < manifest.length; i++) {
-            const task = manifest[i];
-            const progress = 50 + ((i + 1) / manifest.length) * 50;
-            this._updateProgress(`Initializing: ${task.name}`, progress);
-            
-            const module = this.loadedModules.get(task.path);
-            if (!module) {
-                return this.fail(new Error(`Module not found for ${task.name}`));
-            }
-
-            const ModuleClass = module.default;
-            if (ModuleClass && typeof ModuleClass.create === 'function') {
-                try {
-                    await ModuleClass.create();
-                } catch (err) {
-                    return this.fail(err, task);
-                }
-            } else {
-                Debugger.log(`Skipping initialization for ${task.name} (no create method)`);
-            }
-            await new Promise(resolve => setTimeout(resolve, 200)); // Slight delay for visibility
-        }
-
-        this._updateProgress('Ready', 100, true);
-        this._showStartButton();
+    // Ensure the render loop is running after everything is ready
+    try {
+      Viewport.instance?.beginRenderLoop?.();
+    } catch (e) {
+      // If beginRenderLoop not yet set up, ignore.
     }
 
-    _showStartButton() {
-        if (this.hasFailed) return;
-        this.startButton.disabled = false;
-        this.startButton.style.backgroundColor = '#d2a679'; // Active color
-        this.startButton.style.color = '#fff';
-    }
+    // Fade out the overlay so the game is visible
+    requestAnimationFrame(() => {
+      this.root.classList.add('fade-out');
+      setTimeout(() => {
+        this.root.remove();
+      }, 650);
+    });
+  }
 
-    fail(error, task = {}) {
-        if (this.hasFailed) return;
-        this.hasFailed = true;
-        const taskName = task.name || 'Unnamed Task';
-        const taskModule = task.module || task.path || 'Unknown';
-        const errorMessage = `Failed during [${taskName}]: ${error.message}`;
-        
-        Debugger.error(errorMessage, error.stack);
-        
-        if (this.statusElement) {
-            this.statusElement.textContent = 'Fatal Error';
-            this.progressBar.style.width = '100%';
-            this.progressBar.style.backgroundColor = '#c94a4a';
-            this.percentEl.textContent = 'FAIL';
-        }
+  fail(error, task = {}) {
+    if (this.hasFailed) return;
+    this.hasFailed = true;
 
-        if (this.errorDetails) {
-            this.errorDetails.style.display = 'block';
-            this.errorDetails.innerHTML = `
-                <h2>Error Details:</h2>
-                <p><strong>Error Message:</strong> ${error.message}</p>
-                <p><strong>Affected File/Module:</strong> ${taskModule} (${taskName})</p>
-                <p><strong>Possible Cause:</strong> This could be due to a module import failure, missing export, network issue loading a file, or runtime error in initialization. Check if paths are correct, dependencies exist, and no syntax errors in the file.</p>
-                <p><strong>Stack Trace:</strong><pre>${error.stack || 'No stack trace available'}</pre></p>
-                <p><strong>Helpful Tips:</strong> Open browser console (F12) for full logs. Check Network tab for failed requests. Verify import paths in Router.js. Ensure Three.js CDN is accessible. Restart server or clear cache if needed.</p>
-            `;
-        }
-    }
+    const taskName = task.name || 'Unnamed Task';
+    const taskModule = task.module || task.path || 'Unknown';
+    const msg = `Failed during [${taskName}]: ${error.message}`;
 
-    _updateProgress(message, progress, isComplete = false) {
-        if (this.hasFailed) return;
-        this.statusElement.textContent = message;
-        const pct = Math.floor(Math.min(100, progress));
-        this.progressBar.style.width = `${pct}%`;
-        this.percentEl.textContent = `${pct}%`;
-        if (isComplete) {
-            this.progressBar.style.backgroundColor = '#64b964';
-        }
-    }
+    Debugger.error(msg, error.stack);
 
-    _cacheDOMElements() {
-        this.loadingScreen = document.getElementById('game-loading-screen');
-        this.progressBar = document.getElementById('game-loading-bar-fill');
-        this.percentEl = document.getElementById('game-loading-percent');
-        this.statusElement = document.getElementById('game-loading-status');
-        this.startButton = document.getElementById('game-start-button');
-        this.errorDetails = document.getElementById('error-details');
-    }
+    // Keep the loading UI visible, show error details
+    this._show(this.loadingScreen);
+    this._setStatus('Fatal Error');
+    this._setProgress(100);
+    this.progressBar.style.background =
+      'linear-gradient(90deg, rgba(220,38,38,1) 0%, rgba(239,68,68,1) 100%)';
 
-    _createDOM() {
-        const style = `
-            #game-loading-screen { position: fixed; inset: 0; background: linear-gradient(to bottom, #f4a460, #c2b280); z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: sans-serif; color: #fff; transition: opacity 1s ease; }
-            #game-loading-screen.fade-out { opacity: 0; pointer-events: none; }
-            #game-loading-content { width: 90%; max-width: 400px; text-align: center; position: relative; top: -5%; } /* Tad above center */
-            h1 { font-family: 'Cinzel', serif; font-size: 3em; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.3); margin-bottom: 0.5em; }
-            #game-loading-bar-container { width: 100%; height: 8px; background-color: rgba(255,255,255,0.3); border-radius: 4px; overflow: hidden; margin: 1em 0; position: relative; }
-            #game-loading-bar-fill { height: 100%; background-color: #fff; transition: width 0.3s ease, background-color 0.3s ease; }
-            #game-loading-percent { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 0px; color: #333; } /* Hidden, but if needed visible inside */
-            #game-loading-status { margin-bottom: 1em; font-size: 1em; color: #fff; text-shadow: 0 0 5px rgba(0,0,0,0.2); }
-            #game-start-button { padding: 10px 20px; font-size: 1.2em; background-color: #a08d6e; color: #ddd; border: none; border-radius: 5px; cursor: not-allowed; opacity: 0.6; }
-            #game-start-button:disabled { background-color: #a08d6e; opacity: 0.6; cursor: not-allowed; }
-            #error-details { display: none; margin-top: 2em; text-align: left; background: rgba(0,0,0,0.5); padding: 1em; border-radius: 5px; color: #fff; max-height: 300px; overflow: auto; }
-            #error-details pre { white-space: pre-wrap; word-wrap: break-word; }
-        `;
-        document.head.insertAdjacentHTML('beforeend', `<style>${style}</style>`);
-        
-        document.body.insertAdjacentHTML('afterbegin', `
-            <div id="game-loading-screen">
-                <div id="game-loading-content">
-                    <h1>Duneborne</h1>
-                    <div id="game-loading-bar-container">
-                        <div id="game-loading-bar-fill"></div>
-                        <span id="game-loading-percent">0%</span>
-                    </div>
-                    <p id="game-loading-status">Initializing...</p>
-                    <button id="game-start-button" disabled>Start</button>
-                    <div id="error-details"></div>
-                </div>
-            </div>
-        `);
+    // Render a simple error block under the loading UI
+    if (!this.errorBlock) {
+      this.errorBlock = document.createElement('div');
+      this.errorBlock.className =
+        'mt-6 text-left text-sm glass-panel p-4 rounded-md';
+      this.loadingScreen.appendChild(this.errorBlock);
     }
+    this.errorBlock.innerHTML = `
+      <h2 class="text-red-400 font-bold mb-2">Error Details</h2>
+      <p><strong>Message:</strong> ${error.message}</p>
+      <p><strong>Module:</strong> ${taskModule} (${taskName})</p>
+      <pre class="mt-2 whitespace-pre-wrap opacity-80">${error.stack || 'No stack trace'}</pre>
+    `;
+  }
+
+  // --- DOM helpers -----------------------------------------------------
+
+  _setStatus(text) {
+    if (this.loadingStatus) this.loadingStatus.textContent = text;
+  }
+  _setProgress(value) {
+    const pct = Math.max(0, Math.min(100, Math.floor(value)));
+    this.progressBar.style.width = `${pct}%`;
+    if (this.progressPct) this.progressPct.textContent = `${pct}%`;
+  }
+
+  _show(el) { el?.classList.remove('hidden'); }
+  _hide(el) { el?.classList.add('hidden'); }
+
+  _cacheDOMElements() {
+    this.root           = document.getElementById('dustborne-launcher-root');
+    this.launcherScreen = document.getElementById('launcherScreen');
+    this.loadingScreen  = document.getElementById('loadingScreen');
+
+    this.startGameBtn   = document.getElementById('startGameBtn');
+    this.optionsBtn     = document.getElementById('optionsBtn');
+    this.exitBtn        = document.getElementById('exitBtn');
+
+    this.progressBar    = document.getElementById('progressBar');
+    this.loadingStatus  = document.getElementById('loadingStatus');
+    this.progressPct    = document.getElementById('progressPercentage');
+  }
+
+  /**
+   * Builds the exact launcher/loading markup you provided,
+   * wrapped in a single fixed overlay root so it sits above the canvas.
+   */
+  _buildOverlayDOM() {
+    const html = `
+      <div id="dustborne-launcher-root" class="min-h-screen flex items-center justify-center overflow-hidden">
+        <!-- Launcher/Main Menu Screen -->
+        <div id="launcherScreen" class="w-full max-w-lg p-8 rounded-lg shadow-2xl glass-panel">
+          <h1 class="text-5xl font-black text-center text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2">PROJECT: ODYSSEY</h1>
+          <p class="text-center text-indigo-300 mb-8">Main Menu</p>
+          <div class="flex flex-col space-y-4">
+            <button id="startGameBtn" class="w-full py-3 rounded-md btn-launcher">Start Game</button>
+            <button id="optionsBtn" class="w-full py-3 rounded-md btn-launcher">Options</button>
+            <button id="exitBtn" class="w-full py-3 rounded-md btn-launcher">Exit</button>
+          </div>
+        </div>
+
+        <!-- Loading Screen -->
+        <div id="loadingScreen" class="hidden w-full max-w-xl text-center">
+          <h2 class="text-3xl font-bold text-white mb-4">LOADING...</h2>
+          <p id="loadingStatus" class="text-purple-300 mb-6">Initializing game engine...</p>
+          <div class="progress-bar-container w-full h-6 rounded-full overflow-hidden">
+            <div id="progressBar" class="progress-bar-fill h-full rounded-full" style="width: 0%;"></div>
+          </div>
+          <p id="progressPercentage" class="mt-3 text-lg font-semibold">0%</p>
+        </div>
+
+        <!-- Version tag (exact) -->
+        <div id="version-tag">v0.1.0-alpha</div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
 }
