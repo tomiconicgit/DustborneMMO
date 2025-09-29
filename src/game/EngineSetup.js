@@ -4,13 +4,17 @@ import paths from '../Router.js';
 export default class EngineSetup {
   getManifest() {
     return [
-      // Core Engine - Order matters
-      { name: 'Scene',            path: paths.scene },
-      { name: 'Camera',           path: paths.camera },
-      { name: 'Viewport',         path: paths.viewport },
-      { name: 'Lighting',         path: paths.lighting },
-      { name: 'Sky',              path: paths.sky },
-      { name: 'SoundManager',     path: paths.soundManager },
+      // Core (order matters)
+      { name: 'Scene',        path: paths.scene },
+      { name: 'Camera',       path: paths.camera },
+      { name: 'Viewport',     path: paths.viewport },
+      { name: 'Lighting',     path: paths.lighting },
+      { name: 'Sky',          path: paths.sky },
+      { name: 'SoundManager', path: paths.soundManager },
+
+      // Tick + input
+      { name: 'UpdateBus',    path: paths.updateBus },     // NEW
+      { name: 'GroundPicker', path: paths.groundPicker },  // NEW
 
       // World
       { name: 'WorldMap',         path: paths.worldMap },
@@ -19,10 +23,14 @@ export default class EngineSetup {
       { name: 'ChunkManager',     path: paths.chunkManager },
 
       // Player
-      { name: 'Character',        path: paths.character },
+      { name: 'Character',    path: paths.character },
 
-      // Dev tools
-      { name: 'GridToggle',       path: paths.devGrid },
+      // Navigation
+      { name: 'Pathfinding',  path: paths.pathfinding },   // NEW
+      { name: 'Movement',     path: paths.movement },      // NEW
+
+      // Dev
+      { name: 'GridToggle',   path: paths.devGrid },
     ];
   }
 }
