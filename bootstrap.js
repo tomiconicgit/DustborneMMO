@@ -1,22 +1,18 @@
 // file: bootstrap.js
-import paths from './src/router.js';
 import LoadingManager from './src/ui/LoadingManager.js';
+import EngineSetup from './src/game/EngineSetup.js';
+import Debugger from './src/debugger.js';
 
-document.addEventListener('DOMContentLoaded', async () => {
-  // Instantiate the LoadingManager AFTER the DOM is ready.
-  const loadingManager = new LoadingManager();
-
-  try {
-    // --- Preflight check ---
-    // Ensures Safari/iOS actually resolves the import map for 'three'.
-    // If this fails, the error will show clearly in the loader.
-    await import('three');
-
-    // Now load the engine setup
-    const { default: EngineSetup } = await import(paths.engineSetup);
+document.addEventListener('DOMContentLoaded', () => {
+    Debugger.init();
+    const loadingManager = new LoadingManager();
     const gameEngine = new EngineSetup();
-    loadingManager.start(gameEngine);
-  } catch (err) {
-    loadingManager.reportBootError(err, { module: 'bootstrap preflight' });
-  }
+    
+    try {
+        loadingManager.start(gameEngine);
+        Debugger.log('Bootstrap complete. Handing over to LoadingManager.');
+    } catch (err) {
+        loadingManager.fail(err, { module: 'bootstrap' });
+        Debugger.error('A critical error occurred during bootstrap.', err);
+    }
 });
