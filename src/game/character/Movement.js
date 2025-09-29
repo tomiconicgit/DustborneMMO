@@ -1,82 +1,102 @@
 // file: src/game/character/Movement.js
 import * as THREE from 'three';
 import UpdateBus from '../../engine/core/UpdateBus.js';
-import Pathfinding from '../../engine/lib/Pathfinding.js';
 import Character from './Character.js';
-import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from '../world/WorldMap.js';
+import Pathfinding from '../../engine/lib/Pathfinding.js';
+import CharacterAnimator from './CharacterAnimator.js';
+import { TILE_SIZE } from '../world/WorldMap.js';
 
 export default class Movement {
-  static instance = null;
+  static main = null;
 
   static create() {
-    if (!Movement.instance) Movement.instance = new Movement();
+    if (Movement.main) return;
+    Movement.main = new Movement();
   }
 
   constructor() {
-    this.pf = new Pathfinding();      // grid auto-reads 30x30, TILE_SIZE=1
-    this.path = [];
-    this.speed = 3.0;                 // units / second across tiles
-    this.eps = 0.01;
+    this.pathfinder = new Pathfinding(/* if your impl needs world, pass it here */);
+    this.currentPath = null;  // array<Vector3>
+    this.currentIndex = 0;
+    this.speed = 2.5;         // world units / second
+    this.epsilon = 0.02;
 
-    // listen for taps from GroundPicker
-    window.addEventListener('ground:tap', (e) => {
-      const target = e.detail?.point;
-      this.onTap(target);
+    this._unsub = UpdateBus.on((dt) => this.update(dt));
+
+    // Tap-to-move
+    window.addEventListener('ground:tap', (ev) => {
+      const point = ev.detail?.point;
+      if (!point) return;
+      this.moveTo(point);
     });
-
-    // tick each frame
-    UpdateBus.on((dt) => this.update(dt));
   }
 
-  onTap(target) {
-    const ch = Character.instance?.object3D;
-    if (!ch || !target) return;
-
-    // Clamp target within world
-    const minX = 0, minZ = 0;
-    const maxX = WORLD_WIDTH * TILE_SIZE, maxZ = WORLD_DEPTH * TILE_SIZE;
-    const clamped = new THREE.Vector3(
-      THREE.MathUtils.clamp(target.x, minX, maxX - 1e-3),
-      0,
-      THREE.MathUtils.clamp(target.z, minZ, maxZ - 1e-3)
-    );
-
-    const path = this.pf.findPath(ch.position, clamped);
-    if (path && path.length > 1) {
-      // Drop the first node if it's essentially current tile center
-      const first = path[0];
-      if (first.distanceToSquared(ch.position) < 0.25) path.shift();
-      this.path = path;
-    }
-  }
-
-  update(dt) {
-    if (!this.path.length) return;
+  moveTo(worldPoint) {
     const ch = Character.instance?.object3D;
     if (!ch) return;
 
-    const target = this.path[0];
-    const to = new THREE.Vector3().subVectors(target, ch.position);
-    const dist = to.length();
-    if (dist < this.eps) {
-      this.path.shift();
+    // Build a path from current pos to target pos (on y=0 plane)
+    const start = ch.position.clone();
+    const end = new THREE.Vector3(worldPoint.x, 0, worldPoint.z);
+    const path = this.pathfinder.findPath(start, end);
+
+    if (!path || path.length < 2) {
+      // No path; stop animation if any
+      CharacterAnimator.main?.stopAll();
+      this.currentPath = null;
       return;
     }
 
-    const step = this.speed * dt;
-    if (step >= dist) {
-      ch.position.copy(target);
-      this.path.shift();
-    } else {
-      to.normalize().multiplyScalar(step);
-      ch.position.add(to);
+    // Slightly reduce jitter: snap nodes to tile centers with +0.5 offset if you want
+    // (assumes TILE_SIZE = 1 and centers mode)
+    for (let i = 0; i < path.length; i++) {
+      path[i].y = 0;
     }
 
-    // face movement direction softly (optional)
-    if (to.lengthSq() > 1e-6) {
-      const look = new THREE.Vector3(ch.position.x + to.x, ch.position.y, ch.position.z + to.z);
-      // if your character has its own mesh child, rotate that instead
-      ch.lookAt(look);
+    this.currentPath = path;
+    this.currentIndex = 0;
+
+    // Start walking animation
+    CharacterAnimator.main?.playWalk();
+  }
+
+  update(dt) {
+    const ch = Character.instance?.object3D;
+    if (!ch) return;
+
+    // Drive animation mixer as well
+    const mixer = Character.instance?.mixer;
+    if (mixer) mixer.update(dt);
+
+    if (!this.currentPath || this.currentIndex >= this.currentPath.length) return;
+
+    const target = this.currentPath[this.currentIndex];
+    const dir = new THREE.Vector3().subVectors(target, ch.position);
+    const dist = dir.length();
+
+    if (dist <= this.epsilon) {
+      // Arrived at this node
+      this.currentIndex++;
+      if (this.currentIndex >= this.currentPath.length) {
+        // Reached final destination
+        this.currentPath = null;
+        this.currentIndex = 0;
+        CharacterAnimator.main?.stopAll();
+      }
+      return;
+    }
+
+    dir.normalize();
+    ch.position.addScaledVector(dir, this.speed * dt);
+
+    // Face direction of movement (optional)
+    if (dist > 1e-4) {
+      const face = new THREE.Vector3().copy(dir);
+      const yaw = Math.atan2(face.x, face.z);
+      // Rotate model root (not the whole group offset)
+      if (Character.instance.root) {
+        Character.instance.root.rotation.set(0, yaw, 0);
+      }
     }
   }
 }
