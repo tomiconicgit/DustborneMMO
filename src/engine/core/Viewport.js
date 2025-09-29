@@ -18,13 +18,16 @@ export default class Viewport {
             throw new Error("Viewport is a singleton. Use Viewport.instance.");
         }
 
-        this.scene = Scene.main;
-        this.camera = Camera.main;
+        // NOTE: We no longer store scene and camera instances here
+        // to avoid race conditions. They will be fetched live in the render loop.
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(this.renderer.domElement);
+
+        // Reliably create controls now that the renderer's DOM element exists
+        Camera.addControls(this.renderer.domElement);
 
         window.addEventListener('resize', this.onWindowResize.bind(this), false);
         
@@ -44,17 +47,26 @@ export default class Viewport {
     }
     
     render() {
-        if (!this.scene || !this.camera) return;
-        
-        Debugger.update(); // Update FPS counter
-        Camera.controls?.update(); // Update camera controls if they exist
+        // CORE FIX: Fetch the latest singleton instances on every frame.
+        const scene = Scene.main;
+        const camera = Camera.main;
 
-        this.renderer.render(this.scene, this.camera);
+        // This check now uses the live instances.
+        if (!scene || !camera) return;
+        
+        Debugger.update();
+        Camera.controls?.update();
+
+        // Render using the live instances.
+        this.renderer.render(scene, camera);
     }
 
     onWindowResize() {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
+        const camera = Camera.main; // Use the live instance here too
+        if (camera) {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        }
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 }
