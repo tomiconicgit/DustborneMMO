@@ -35,18 +35,18 @@ export default class Sky {
 
     const uniforms = {
       topColor:    { value: new THREE.Color(0x87ceeb) }, // sky blue
-      bottomColor: { value: new THREE.Color(0xe9eef3) }, // lighter haze
+      bottomColor: { value: new THREE.Color(0xb7c6e0) }, // softer blue haze (not white)
       offset:      { value: 0.0 },
       exponent:    { value: 0.6 }
     };
 
-    // Fog tighter to terrain/horizon
+    // Horizon-only fog: far from camera so most of the sky remains visible
     const maxDim = Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE;
-    const fogNear = maxDim * 0.15; // was 0.5
-    const fogFar  = maxDim * 0.90; // was 2.0
+    const fogNear = maxDim * 1.2;   // start well beyond the terrain
+    const fogFar  = maxDim * 3.0;   // fade out at a distant horizon
     scene.fog = new THREE.Fog(uniforms.bottomColor.value, fogNear, fogFar);
 
-    // Sky dome fits well within camera far
+    // Sky dome sized inside camera far
     const cam = Camera.main?.threeCamera || Camera.main;
     const radius = (cam?.far ? cam.far * 0.9 : maxDim * 20);
 
@@ -54,9 +54,10 @@ export default class Sky {
     const skyMat = new THREE.ShaderMaterial({
       uniforms, vertexShader, fragmentShader, side: THREE.BackSide
     });
+
     const sky = new THREE.Mesh(skyGeo, skyMat);
     sky.name = 'SkyDome';
-    sky.onBeforeRender = (_r, _s, camera) => sky.position.copy(camera.position);
+    sky.onBeforeRender = (_r, _s, camera) => { sky.position.copy(camera.position); };
     scene.add(sky);
   }
 }
