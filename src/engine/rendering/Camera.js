@@ -7,40 +7,37 @@ export default class Camera {
 
   static create() {
     if (Camera.main) return;
-    Camera.main = new Camera(); // exposes .threeCamera, .setTarget(), .update()
+    Camera.main = new Camera();
   }
 
   constructor() {
-    // --- World / view constraints for 30x30 terrain ---
-    this.worldHalfX = (WORLD_WIDTH * TILE_SIZE) / 2;   // e.g., 15
-    this.worldHalfZ = (WORLD_DEPTH * TILE_SIZE) / 2;   // e.g., 15
+    // World bounds for 30x30 tiles
+    this.worldHalfX = (WORLD_WIDTH * TILE_SIZE) / 2;
+    this.worldHalfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
 
-    // --- Core camera ---
+    // Perspective camera
     this.threeCamera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / (window.innerHeight * 0.6),
       0.1,
-      Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE * 2 // render distance ~ covers whole 30x30
+      Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE * 2 // far plane covers terrain
     );
 
-    // --- Old-PWA feel: fixed orbit around a target ---
-    this.target        = null;            // THREE.Object3D or { position: Vector3 }
-    this.orbitAngle    = Math.PI / 4;     // 45°
-    this.orbitDistance = 6;               // zoom
-    this.cameraHeight  = 3;               // vertical offset
+    // Orbit-style properties (old PWA style)
+    this.target        = null;
+    this.orbitAngle    = Math.PI / 4; // 45°
+    this.orbitDistance = 6;           // zoom
+    this.cameraHeight  = 3;           // height above ground
 
-    // Limits (keep user within the 30x30 world visuals)
     this.minDistance = 4;
     this.maxDistance = 12;
 
-    // Touch controller on window (so we don’t depend on Viewport ordering)
     new CameraController(window, this);
 
-    // Keep aspect reasonable on mobile
     window.addEventListener('resize', this.handleResize, { passive: true });
     this.handleResize();
 
-    // Start pointed at origin by default
+    // Start pointed at center
     this.setTarget({ position: new THREE.Vector3(0, 0, 0) });
   }
 
@@ -50,23 +47,25 @@ export default class Camera {
   }
 
   update() {
-    // If no target yet, nothing to do.
     if (!this.target) return;
 
-    // Clamp the look target inside world bounds (-half..+half)
     const tp = this.target.position.clone();
+
+    // Clamp target within world bounds
     tp.x = THREE.MathUtils.clamp(tp.x, -this.worldHalfX, this.worldHalfX);
     tp.z = THREE.MathUtils.clamp(tp.z, -this.worldHalfZ, this.worldHalfZ);
 
-    // Enforce zoom limits and compute orbit offset
+    // Clamp zoom
     this.orbitDistance = THREE.MathUtils.clamp(this.orbitDistance, this.minDistance, this.maxDistance);
+
+    // Compute orbit offset
     const ideal = new THREE.Vector3(
       tp.x + this.orbitDistance * Math.sin(this.orbitAngle),
       tp.y + this.cameraHeight,
       tp.z + this.orbitDistance * Math.cos(this.orbitAngle)
     );
 
-    // Also clamp camera position so we never look beyond terrain edges
+    // Clamp camera position inside terrain too
     ideal.x = THREE.MathUtils.clamp(ideal.x, -this.worldHalfX, this.worldHalfX);
     ideal.z = THREE.MathUtils.clamp(ideal.z, -this.worldHalfZ, this.worldHalfZ);
 
@@ -80,11 +79,6 @@ export default class Camera {
   };
 }
 
-/**
- * Minimal touch drag controller (old PWA style):
- * - One-finger horizontal drag: rotate orbit angle
- * - Two-finger pinch: zoom in/out (adjust orbitDistance)
- */
 class CameraController {
   constructor(dom, camera) {
     this.camera = camera;
@@ -93,7 +87,7 @@ class CameraController {
     dom.addEventListener('touchstart', this.onStart, { passive: false });
     dom.addEventListener('touchmove',  this.onMove,  { passive: false });
     dom.addEventListener('touchend',   this.onEnd,   { passive: false });
-    dom.addEventListener('wheel',      this.onWheel, { passive: true  }); // optional desktop zoom
+    dom.addEventListener('wheel',      this.onWheel, { passive: true  });
   }
 
   onStart = (e) => {
@@ -114,7 +108,7 @@ class CameraController {
       const dx = x - this.touchState.lastX;
       this.touchState.lastX = x;
 
-      this.camera.orbitAngle -= dx * 0.01; // rotate
+      this.camera.orbitAngle -= dx * 0.01;
       this.camera.update();
     } else if (e.touches.length === 2 && this.touchState.lastPinch !== null) {
       e.preventDefault();
@@ -122,7 +116,6 @@ class CameraController {
       const delta = dist - this.touchState.lastPinch;
       this.touchState.lastPinch = dist;
 
-      // pinch to zoom
       this.camera.orbitDistance -= delta * 0.01;
       this.camera.update();
     }
@@ -134,7 +127,7 @@ class CameraController {
   };
 
   onWheel = (e) => {
-    this.camera.orbitDistance += e.deltaY * 0.001; // scroll to zoom
+    this.camera.orbitDistance += e.deltaY * 0.001;
     this.camera.update();
   };
 
@@ -142,5 +135,5 @@ class CameraController {
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.hypot(dx, dy);
-    }
+  }
 }
