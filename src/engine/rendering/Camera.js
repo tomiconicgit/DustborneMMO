@@ -17,7 +17,7 @@ export default class Camera {
 
     // Use FULL window height for aspect (no *0.6)
     this.threeCamera = new THREE.PerspectiveCamera(
-      60, // FOV
+      90, // FOV
       window.innerWidth / window.innerHeight,
       0.1,
       Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE * 2
