@@ -19,50 +19,38 @@ export default class GridToggle {
     this.group.visible = false;
     this.scene.add(this.group);
 
-    // Grid matches the terrain size (WORLD_WIDTH × WORLD_DEPTH)
-    const sizeX = WORLD_WIDTH * TILE_SIZE;
-    const sizeZ = WORLD_DEPTH * TILE_SIZE;
-    const divisions = WORLD_WIDTH; // 1 line per tile
+    // GridHelper is already on the XZ plane; no rotation needed.
+    const size   = Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE;
+    const divs   = WORLD_WIDTH; // lines per tile
+    const grid   = new THREE.GridHelper(size, divs, 0x444444, 0x444444);
+    grid.position.y = 0.02; // avoid z-fighting
+    this.group.add(grid);
 
-    const gridHelper = new THREE.GridHelper(
-      Math.max(sizeX, sizeZ),
-      divisions,
-      0x444444,
-      0x444444
-    );
-    gridHelper.rotation.x = Math.PI / 2; // keep aligned with X/Z plane
-    gridHelper.position.y = 0.02; // just above ground to avoid z-fighting
-    this.group.add(gridHelper);
-
-    // UI toggle button
+    // Safe-area aware toggle button (won’t hide under the notch)
     const button = document.createElement('button');
     button.textContent = 'Grid';
     Object.assign(button.style, {
       position: 'fixed',
-      top: '10px',
-      right: '10px',
+      top: 'calc(env(safe-area-inset-top, 0px) + 10px)',
+      right: 'calc(env(safe-area-inset-right, 0px) + 10px)',
       zIndex: '20000',
       padding: '8px 12px',
-      fontFamily: 'Orbitron, sans-serif',
+      fontFamily: 'Orbitron, system-ui, sans-serif',
       fontWeight: '600',
       letterSpacing: '1px',
       color: '#111',
       background: '#f5eeda',
       border: '1px solid rgba(0,0,0,.2)',
       borderRadius: '8px',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      WebkitTapHighlightColor: 'transparent'
     });
-
     button.addEventListener('click', () => {
       this.group.visible = !this.group.visible;
     });
     document.body.appendChild(button);
   }
 
-  /**
-   * Call this per frame (or when player moves) to re-center grid on player.
-   * Keeps the grid aligned to world tiles.
-   */
   update(playerPosition) {
     if (!this.group.visible || !playerPosition) return;
     this.group.position.x = Math.round(playerPosition.x);
