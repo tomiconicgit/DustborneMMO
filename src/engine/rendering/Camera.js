@@ -15,9 +15,9 @@ export default class Camera {
     this.worldHalfX = (WORLD_WIDTH * TILE_SIZE) / 2;
     this.worldHalfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
 
-    // Use FULL window height for aspect (no *0.6)
+    // Perspective camera
     this.threeCamera = new THREE.PerspectiveCamera(
-      90, // FOV
+      60,
       window.innerWidth / window.innerHeight,
       0.1,
       Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE * 2
@@ -26,18 +26,22 @@ export default class Camera {
     // Orbit-style properties
     this.target        = null;
     this.orbitAngle    = Math.PI / 4;
-    this.orbitDistance = 6;
-    this.minCameraHeight  = 3;
-    this.maxCameraHeight  = 6;
+    this.orbitDistance = 6;   // start mid-zoom
 
-    this.minDistance = 4;
-    this.maxDistance = 9;
+    // Zoom limits (requested)
+    this.minDistance = 3;     // zoomed all the way in
+    this.maxDistance = 9;     // zoomed all the way out
+
+    // Auto-height bounds (requested)
+    this.minHeight = 3;       // at minDistance
+    this.maxHeight = 6;       // at maxDistance
 
     new CameraController(window, this);
 
     window.addEventListener('resize', this.handleResize, { passive: true });
     this.handleResize();
 
+    // Start pointed at center
     this.setTarget({ position: new THREE.Vector3(0, 0, 0) });
   }
 
@@ -46,20 +50,33 @@ export default class Camera {
     this.update();
   }
 
+  // Map orbitDistance -> camera height (linear)
+  _heightFromDistance() {
+    const d = THREE.MathUtils.clamp(this.orbitDistance, this.minDistance, this.maxDistance);
+    const t = (d - this.minDistance) / (this.maxDistance - this.minDistance); // 0..1
+    return THREE.MathUtils.lerp(this.minHeight, this.maxHeight, t);
+  }
+
   update() {
     if (!this.target) return;
 
+    // Clamp target within world bounds
     const tp = this.target.position.clone();
     tp.x = THREE.MathUtils.clamp(tp.x, -this.worldHalfX, this.worldHalfX);
     tp.z = THREE.MathUtils.clamp(tp.z, -this.worldHalfZ, this.worldHalfZ);
 
+    // Clamp zoom and derive height from zoom
     this.orbitDistance = THREE.MathUtils.clamp(this.orbitDistance, this.minDistance, this.maxDistance);
+    const cameraHeight = this._heightFromDistance();
 
+    // Compute orbit offset
     const ideal = new THREE.Vector3(
       tp.x + this.orbitDistance * Math.sin(this.orbitAngle),
-      tp.y + this.cameraHeight,
+      tp.y + cameraHeight,
       tp.z + this.orbitDistance * Math.cos(this.orbitAngle)
     );
+
+    // Clamp camera position inside terrain too
     ideal.x = THREE.MathUtils.clamp(ideal.x, -this.worldHalfX, this.worldHalfX);
     ideal.z = THREE.MathUtils.clamp(ideal.z, -this.worldHalfZ, this.worldHalfZ);
 
@@ -68,7 +85,6 @@ export default class Camera {
   }
 
   handleResize = () => {
-    // FIX: full height here too
     this.threeCamera.aspect = window.innerWidth / window.innerHeight;
     this.threeCamera.updateProjectionMatrix();
   };
@@ -103,7 +119,7 @@ class CameraController {
       const dx = x - this.touchState.lastX;
       this.touchState.lastX = x;
 
-      this.camera.orbitAngle -= dx * 0.01;
+      this.camera.orbitAngle -= dx * 0.01; // rotate
       this.camera.update();
     } else if (e.touches.length === 2 && this.touchState.lastPinch !== null) {
       e.preventDefault();
@@ -111,7 +127,7 @@ class CameraController {
       const delta = dist - this.touchState.lastPinch;
       this.touchState.lastPinch = dist;
 
-      this.camera.orbitDistance -= delta * 0.01;
+      this.camera.orbitDistance -= delta * 0.01; // pinch to zoom
       this.camera.update();
     }
   };
@@ -122,7 +138,7 @@ class CameraController {
   };
 
   onWheel = (e) => {
-    this.camera.orbitDistance += e.deltaY * 0.001;
+    this.camera.orbitDistance += e.deltaY * 0.001; // scroll to zoom
     this.camera.update();
   };
 
