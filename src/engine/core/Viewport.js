@@ -2,21 +2,18 @@
 import * as THREE from 'three';
 import Scene from './Scene.js';
 import Camera from '../rendering/Camera.js';
+import UpdateBus from './UpdateBus.js';
 import Debugger from '../../debugger.js';
 
 export default class Viewport {
   static instance = null;
 
   static create() {
-    if (!Viewport.instance) {
-      Viewport.instance = new Viewport();
-    }
+    if (!Viewport.instance) Viewport.instance = new Viewport();
   }
 
   constructor() {
-    if (Viewport.instance) {
-      throw new Error("Viewport is a singleton. Use Viewport.instance.");
-    }
+    if (Viewport.instance) throw new Error("Viewport is a singleton. Use Viewport.instance.");
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -25,6 +22,7 @@ export default class Viewport {
 
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
 
+    this.clock = new THREE.Clock();       // NEW
     this.isRunning = false;
   }
 
@@ -45,7 +43,9 @@ export default class Viewport {
     const camera = Camera.main?.threeCamera || Camera.main;
     if (!scene || !camera) return;
 
-    Debugger.update();
+    const dt = this.clock.getDelta();     // NEW
+    UpdateBus.tick(dt);                   // NEW
+
     this.renderer.render(scene, camera);
   }
 
