@@ -23,12 +23,13 @@ export default class EngineSetup {
       { name: 'StaticObjectMap',      path: paths.staticObjectMap },
       { name: 'ChunkManager',         path: paths.chunkManager },
 
-      // Player
+      // Character
       { name: 'Character',            path: paths.character },
+      { name: 'CharacterAnimator',    path: paths.characterAnimator }, // <-- after Character
 
       // Navigation
-      { name: 'Pathfinding',          path: paths.pathfinding }, // <— uses Router path
-      { name: 'Movement',             path: paths.movement },
+      { name: 'Pathfinding',          path: paths.pathfinding },
+      { name: 'Movement',             path: paths.movement },          // <-- uses both
 
       // Dev
       { name: 'GridToggle',           path: paths.devGrid },
