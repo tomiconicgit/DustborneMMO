@@ -1,5 +1,4 @@
 // file: src/Router.js
-// Resolve module URLs relative to this file (robust no matter who imports).
 const mod = (pathFromSrc) => new URL(pathFromSrc, import.meta.url).href;
 
 const paths = {
@@ -8,7 +7,7 @@ const paths = {
   viewport:         mod('engine/core/Viewport.js'),
   soundManager:     mod('engine/audio/SoundManager.js'),
   camera:           mod('engine/rendering/Camera.js'),
-  lighting:         mod('engine/rendering/Lighting.js'), // ensure file name matches exactly
+  lighting:         mod('engine/rendering/Lighting.js'),
   sky:              mod('engine/rendering/Sky.js'),
 
   // Game
@@ -17,6 +16,9 @@ const paths = {
   terrainGenerator: mod('game/world/TerrainGenerator.js'),
   staticObjectMap:  mod('game/world/StaticObjectMap.js'),
   chunkManager:     mod('game/world/ChunkManager.js'),
+
+  // Character
+  character:        mod('game/character/Character.js'),
 };
 
 export default paths;
