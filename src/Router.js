@@ -1,4 +1,5 @@
 // file: src/Router.js
+// Resolve module URLs relative to this file (robust no matter who imports).
 const mod = (pathFromSrc) => new URL(pathFromSrc, import.meta.url).href;
 
 const paths = {
@@ -19,6 +20,9 @@ const paths = {
 
   // Character
   character:        mod('game/character/Character.js'),
+
+  // Dev
+  devGrid:          mod('game/dev/GridToggle.js'),
 };
 
 export default paths;
