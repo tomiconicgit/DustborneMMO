@@ -18,9 +18,20 @@ export default class Character {
     this.object3D = new THREE.Group();
     this.object3D.name = 'PlayerCharacter';
 
-    // Center the CHARACTER on the center of the center tile: (+0.5, +0.5)
+    // Center on center tile (0.5, 0.5)
     const HALF_TILE = 0.5 * TILE_SIZE;
-    this.object3D.position.set(HALF_TILE, 0, HALF_TILE); // <-- key change
+    this.object3D.position.set(HALF_TILE, 0, HALF_TILE);
+
+    this.modelRoot = null;   // will hold the loaded mesh root
+    this.mixer = null;       // optional, set by CharacterAnimator
+  }
+
+  setMixer(mixer) {
+    this.mixer = mixer;
+  }
+
+  get root() {
+    return this.modelRoot || this.object3D;
   }
 
   async _load() {
@@ -38,17 +49,16 @@ export default class Character {
       if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
     });
 
-    // Keep the mesh local at (0, 0.01, 0); parent group already offset to tile center.
     model.position.set(0, 0.01, 0);
 
+    this.modelRoot = model;
     this.object3D.add(model);
     scene.add(this.object3D);
 
-    // For future clamps/movement
+    // World half extents (if needed later)
     this.halfX = (WORLD_WIDTH * TILE_SIZE) / 2;
     this.halfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
 
-    // Camera follows the CHARACTER root (which is now centered in a tile)
     Camera.main?.setTarget?.(this.object3D);
   }
 }
