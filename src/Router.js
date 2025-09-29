@@ -9,9 +9,9 @@ const paths = {
   camera:           mod('engine/rendering/Camera.js'),
   lighting:         mod('engine/rendering/Lighting.js'),
   sky:              mod('engine/rendering/Sky.js'),
-  updateBus:        mod('engine/core/UpdateBus.js'),        // NEW
-  groundPicker:     mod('engine/input/GroundPicker.js'),    // NEW
-  pathfinding:      mod('engine/lib/Pathfinding.js'),       // NEW
+  updateBus:        mod('engine/core/UpdateBus.js'),
+  groundPicker:     mod('engine/input/GroundPicker.js'),
+  cameraControls:   mod('engine/input/CameraTouchControls.js'), // <-- NEW
 
   // Game
   engineSetup:      mod('game/EngineSetup.js'),
@@ -22,7 +22,7 @@ const paths = {
 
   // Character
   character:        mod('game/character/Character.js'),
-  movement:         mod('game/character/Movement.js'),      // NEW
+  movement:         mod('game/character/Movement.js'),
 
   // Dev
   devGrid:          mod('game/dev/GridToggle.js'),
