@@ -19,10 +19,6 @@ export default class LoadingManager {
     }
   }
 
-  /**
-   * Starts the launcher flow. We render the launcher first.
-   * When "Start Game" is clicked, we begin actual module loading + init.
-   */
   async start(engineInstance) {
     if (this.hasFailed) return;
     this.engineInstance = engineInstance;
@@ -31,15 +27,12 @@ export default class LoadingManager {
     this._show(this.launcherScreen);
     this._hide(this.loadingScreen);
 
-    // Wire actions
     this.startGameBtn.addEventListener('click', () => {
-      // Flip to loading UI and begin the real boot
       this._hide(this.launcherScreen);
       this._show(this.loadingScreen);
       this._beginBoot();
     });
 
-    // Optional: other buttons are placeholders to match exact layout
     this.optionsBtn?.addEventListener('click', () => {
       Debugger.log('Options clicked (placeholder).');
     });
@@ -56,13 +49,13 @@ export default class LoadingManager {
       return this.fail(new Error('Manifest is empty or invalid.'));
     }
 
-    // Phase 1: Fetch all modules
     this._setStatus('Initializing game engine...');
     this._setProgress(0);
 
+    // Phase 1: load modules
     for (let i = 0; i < manifest.length; i++) {
       const task = manifest[i];
-      const progress = ((i + 1) / manifest.length) * 45; // first half
+      const progress = ((i + 1) / manifest.length) * 45;
       this._setStatus(`Loading: ${task.name}`);
       this._setProgress(progress);
       try {
@@ -73,10 +66,10 @@ export default class LoadingManager {
       }
     }
 
-    // Phase 2: Initialize in order
+    // Phase 2: init
     for (let i = 0; i < manifest.length; i++) {
       const task = manifest[i];
-      const progress = 45 + ((i + 1) / manifest.length) * 55; // 45..100
+      const progress = 45 + ((i + 1) / manifest.length) * 55;
       this._setStatus(`Initializing: ${task.name}`);
       this._setProgress(progress);
 
@@ -96,18 +89,13 @@ export default class LoadingManager {
       }
     }
 
-    // Done
     this._setStatus('Finalizing...');
     this._setProgress(100);
 
-    // Ensure the render loop is running after everything is ready
     try {
       Viewport.instance?.beginRenderLoop?.();
-    } catch (e) {
-      // If beginRenderLoop not yet set up, ignore.
-    }
+    } catch (e) {}
 
-    // Fade out the overlay so the game is visible
     requestAnimationFrame(() => {
       this.root.classList.add('fade-out');
       setTimeout(() => {
@@ -126,14 +114,12 @@ export default class LoadingManager {
 
     Debugger.error(msg, error.stack);
 
-    // Keep the loading UI visible, show error details
     this._show(this.loadingScreen);
     this._setStatus('Fatal Error');
     this._setProgress(100);
     this.progressBar.style.background =
       'linear-gradient(90deg, rgba(220,38,38,1) 0%, rgba(239,68,68,1) 100%)';
 
-    // Render a simple error block under the loading UI
     if (!this.errorBlock) {
       this.errorBlock = document.createElement('div');
       this.errorBlock.className =
@@ -147,8 +133,6 @@ export default class LoadingManager {
       <pre class="mt-2 whitespace-pre-wrap opacity-80">${error.stack || 'No stack trace'}</pre>
     `;
   }
-
-  // --- DOM helpers -----------------------------------------------------
 
   _setStatus(text) {
     if (this.loadingStatus) this.loadingStatus.textContent = text;
@@ -176,16 +160,12 @@ export default class LoadingManager {
     this.progressPct    = document.getElementById('progressPercentage');
   }
 
-  /**
-   * Builds the exact launcher/loading markup you provided,
-   * wrapped in a single fixed overlay root so it sits above the canvas.
-   */
   _buildOverlayDOM() {
     const html = `
       <div id="dustborne-launcher-root" class="min-h-screen flex items-center justify-center overflow-hidden">
         <!-- Launcher/Main Menu Screen -->
-        <div id="launcherScreen" class="w-full max-w-lg p-8 rounded-lg shadow-2xl glass-panel">
-          <h1 class="text-5xl font-black text-center text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2">PROJECT: ODYSSEY</h1>
+        <div id="launcherScreen" class="w-full max-w-md px-8 py-10 rounded-lg shadow-2xl glass-panel">
+          <h1 class="text-5xl font-black text-center text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2">DUSTBORNE</h1>
           <p class="text-center text-indigo-300 mb-8">Main Menu</p>
           <div class="flex flex-col space-y-4">
             <button id="startGameBtn" class="w-full py-3 rounded-md btn-launcher">Start Game</button>
@@ -204,7 +184,7 @@ export default class LoadingManager {
           <p id="progressPercentage" class="mt-3 text-lg font-semibold">0%</p>
         </div>
 
-        <!-- Version tag (exact) -->
+        <!-- Version tag -->
         <div id="version-tag">v0.1.0-alpha</div>
       </div>
     `;
