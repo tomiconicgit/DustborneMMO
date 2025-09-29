@@ -1,5 +1,4 @@
 // file: src/Router.js
-// Resolve module URLs relative to this file (robust no matter who imports).
 const mod = (p) => new URL(p, import.meta.url).href;
 
 const paths = {
@@ -15,7 +14,7 @@ const paths = {
   cameraControls:     mod('engine/input/CameraTouchControls.js'),
 
   // Navigation / AI
-  pathfinding:        mod('engine/lib/Pathfinding.js'), // <— RESTORED (Case-sensitive!)
+  pathfinding:        mod('engine/lib/Pathfinding.js'),
 
   // Game
   engineSetup:        mod('game/EngineSetup.js'),
@@ -26,6 +25,7 @@ const paths = {
 
   // Character
   character:          mod('game/character/Character.js'),
+  characterAnimator:  mod('game/character/CharacterAnimator.js'), // <-- NEW
   movement:           mod('game/character/Movement.js'),
 
   // Dev
