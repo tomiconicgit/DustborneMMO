@@ -1,33 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>New Game</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap" rel="stylesheet">
-    <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #111;
-            width: 100%;
-            height: 100%;
-        }
-        canvas {
-            display: block;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <title>Dustborne</title>
+
+  <!-- Tailwind (for the utility classes used by the launcher markup) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Orbitron font (exact from your sample) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Dustborne launcher styles (exact custom CSS from your sample) -->
+  <link rel="stylesheet" href="./src/ui/launcher.css" />
+
+  <style>
+    /* Core page setup for WebGL canvas behind the overlay */
+    html, body { margin:0; padding:0; overflow:hidden; background:#111; width:100%; height:100%; }
+    canvas { display:block; }
+  </style>
+
+  <!-- three.js import map (unchanged) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+      }
+    }
+  </script>
 </head>
 <body>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
-            }
-        }
-    </script>
-    <script type="module" src="./bootstrap.js"></script>
+  <!-- WebGL will render under the launcher overlay -->
+  <script type="module" src="./bootstrap.js"></script>
 </body>
 </html>
