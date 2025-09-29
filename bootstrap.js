@@ -1,7 +1,7 @@
 // file: bootstrap.js
 import LoadingManager from './src/ui/LoadingManager.js';
 import EngineSetup from './src/game/EngineSetup.js';
-import Debugger from './src/debugger.js';
+import Debugger from './src/debugger.js'; // This path is now correct
 
 document.addEventListener('DOMContentLoaded', () => {
     Debugger.init();
