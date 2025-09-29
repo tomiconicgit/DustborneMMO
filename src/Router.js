@@ -1,5 +1,6 @@
 // file: src/Router.js
-const mod = (path) => `./src/${path}`;
+// CORRECTED: Removed the extra '/src' prefix from paths.
+const mod = (path) => `./${path}`;
 
 const paths = {
     // Engine
@@ -7,7 +8,8 @@ const paths = {
     viewport: mod('engine/core/Viewport.js'),
     soundManager: mod('engine/audio/SoundManager.js'),
     camera: mod('engine/rendering/Camera.js'),
-    lighting: mod('engine/rendering/Lighting.js'),
+    // CORRECTED: Changed 'lighting.js' to 'Lighting.js' to match filename
+    lighting: mod('engine/rendering/Lighting.js'), 
     sky: mod('engine/rendering/Sky.js'),
     
     // Game
