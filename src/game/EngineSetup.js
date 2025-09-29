@@ -2,21 +2,23 @@
 import paths from '../Router.js';
 
 export default class EngineSetup {
-    getManifest() {
-        return [
-            // Core Engine - Order is important here!
-            { name: 'Scene', path: paths.scene },
-            { name: 'Camera', path: paths.camera },
-            { name: 'Viewport', path: paths.viewport },
-            { name: 'Lighting', path: paths.lighting },
-            { name: 'Sky', path: paths.sky },
-            { name: 'SoundManager', path: paths.soundManager },
+  getManifest() {
+    return [
+      { name: 'Scene', path: paths.scene },
+      { name: 'Camera', path: paths.camera },
+      { name: 'Viewport', path: paths.viewport },
+      { name: 'Lighting', path: paths.lighting },
+      { name: 'Sky', path: paths.sky },
+      { name: 'SoundManager', path: paths.soundManager },
 
-            // World Generation
-            { name: 'WorldMap', path: paths.worldMap },
-            { name: 'TerrainGenerator', path: paths.terrainGenerator },
-            { name: 'StaticObjectMap', path: paths.staticObjectMap },
-            { name: 'ChunkManager', path: paths.chunkManager },
-        ];
-    }
+      // World
+      { name: 'WorldMap', path: paths.worldMap },
+      { name: 'TerrainGenerator', path: paths.terrainGenerator },
+      { name: 'StaticObjectMap', path: paths.staticObjectMap },
+      { name: 'ChunkManager', path: paths.chunkManager },
+
+      // Player
+      { name: 'Character', path: paths.character },
+    ];
+  }
 }
