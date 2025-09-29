@@ -1,14 +1,15 @@
 // file: src/engine/input/CameraTouchControls.js
 import GroundPicker from './GroundPicker.js';
 import Camera from '../rendering/Camera.js';
+import Viewport from '../core/Viewport.js';
 
 export default class CameraTouchControls {
   static create() { new CameraTouchControls(); }
 
   constructor() {
     this.cam = Camera.main;
-    this.tapMaxMs = 220;          // max duration to count as a tap
-    this.tapMaxMove = 10;         // px threshold for tap vs drag
+    this.tapMaxMs = 220;     // max duration to register as a tap
+    this.tapMaxMove = 10;    // px movement allowed for a tap
     this.isDragging = false;
 
     // Touch state
@@ -20,18 +21,22 @@ export default class CameraTouchControls {
     // Mouse state
     this.mouseDown = false;
     this.mouseStartTime = 0;
-    this.mStartX = 0; this.mStartY = 0;
+    this.mStartX = 0; this.mStartY = 0; this._mx = 0; this._my = 0;
+    this._mDragging = false;
+
+    // Bind to the actual canvas so rect math stays correct.
+    this.canvas = Viewport.instance?.renderer?.domElement || window;
 
     // Touch events
-    window.addEventListener('touchstart', this.onTouchStart, { passive: false });
-    window.addEventListener('touchmove',  this.onTouchMove,  { passive: false });
-    window.addEventListener('touchend',   this.onTouchEnd,   { passive: false });
+    this.canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    this.canvas.addEventListener('touchmove',  this.onTouchMove,  { passive: false });
+    this.canvas.addEventListener('touchend',   this.onTouchEnd,   { passive: false });
 
     // Mouse events
-    window.addEventListener('mousedown', this.onMouseDown, { passive: false });
-    window.addEventListener('mousemove', this.onMouseMove, { passive: false });
-    window.addEventListener('mouseup',   this.onMouseUp,   { passive: false });
-    window.addEventListener('wheel',     this.onWheel,     { passive: true  });
+    this.canvas.addEventListener('mousedown', this.onMouseDown, { passive: false });
+    this.canvas.addEventListener('mousemove', this.onMouseMove, { passive: false });
+    this.canvas.addEventListener('mouseup',   this.onMouseUp,   { passive: false });
+    this.canvas.addEventListener('wheel',     this.onWheel,     { passive: true  });
   }
 
   /* ---------------- Touch ---------------- */
@@ -45,7 +50,6 @@ export default class CameraTouchControls {
       this.isDragging = false;
       this.pinchLast = null;
     } else if (e.touches.length === 2) {
-      // Begin pinch
       this.pinchLast = this._pinchDistance(e.touches);
       this.isDragging = false;
     }
@@ -53,12 +57,11 @@ export default class CameraTouchControls {
 
   onTouchMove = (e) => {
     if (e.touches.length === 2) {
-      // Pinch zoom
       e.preventDefault();
       const dist = this._pinchDistance(e.touches);
       if (this.pinchLast != null) {
         const delta = dist - this.pinchLast;
-        this._zoomBy(-delta * 0.01);  // invert feels natural
+        this._zoomBy(-delta * 0.01);
       }
       this.pinchLast = dist;
       return;
@@ -73,7 +76,7 @@ export default class CameraTouchControls {
 
       if (this.isDragging) {
         e.preventDefault();
-        this._rotateBy(-dx * 0.01);   // drag left/right to rotate
+        this._rotateBy(-dx * 0.01);
       }
 
       this.lastX = t.clientX;
@@ -81,13 +84,15 @@ export default class CameraTouchControls {
   };
 
   onTouchEnd = (e) => {
-    // A tap is: single touch, short time, tiny move, no pinch
     const dt = performance.now() - this.touchStartTime;
     const wasTap = !this.isDragging && this.pinchLast === null && dt <= this.tapMaxMs;
 
     if (wasTap) {
-      const point = GroundPicker.instance?.pick(this.startX, this.startY);
-      if (point) window.dispatchEvent(new CustomEvent('ground:tap', { detail: { point } }));
+      const t = e.changedTouches?.[0];
+      if (t) {
+        const point = GroundPicker.instance?.pick(t.clientX, t.clientY);
+        if (point) window.dispatchEvent(new CustomEvent('ground:tap', { detail: { point } }));
+      }
     }
 
     this.isDragging = false;
@@ -103,7 +108,7 @@ export default class CameraTouchControls {
   /* ---------------- Mouse ---------------- */
 
   onMouseDown = (e) => {
-    if (e.button !== 0) return; // left only
+    if (e.button !== 0) return;
     this.mouseDown = true;
     this.mouseStartTime = performance.now();
     this.mStartX = this._mx = e.clientX;
@@ -116,12 +121,10 @@ export default class CameraTouchControls {
     const dx = e.clientX - this._mx;
     const moved = Math.hypot(e.clientX - this.mStartX, e.clientY - this.mStartY);
     if (moved > this.tapMaxMove) this._mDragging = true;
-
     if (this._mDragging) {
       e.preventDefault();
       this._rotateBy(-dx * 0.01);
     }
-
     this._mx = e.clientX; this._my = e.clientY;
   };
 
@@ -129,18 +132,16 @@ export default class CameraTouchControls {
     if (e.button !== 0) return;
     const dt = performance.now() - this.mouseStartTime;
     const wasClick = !this._mDragging && dt <= this.tapMaxMs;
-
     if (wasClick) {
-      const point = GroundPicker.instance?.pick(this.mStartX, this.mStartY);
+      const point = GroundPicker.instance?.pick(e.clientX, e.clientY);
       if (point) window.dispatchEvent(new CustomEvent('ground:tap', { detail: { point } }));
     }
-
     this.mouseDown = false;
     this._mDragging = false;
   };
 
   onWheel = (e) => {
-    this._zoomBy(e.deltaY * 0.001); // scroll to zoom
+    this._zoomBy(e.deltaY * 0.001);
   };
 
   /* ------------- Camera ops ------------- */
@@ -153,7 +154,8 @@ export default class CameraTouchControls {
 
   _zoomBy(delta) {
     if (!this.cam) return;
-    this.cam.orbitDistance = Math.max(this.cam.minDistance, Math.min(this.cam.maxDistance, this.cam.orbitDistance + delta));
-    this.cam.update?.();
+    const c = this.cam;
+    c.orbitDistance = Math.max(c.minDistance, Math.min(c.maxDistance, c.orbitDistance + delta));
+    c.update?.();
   }
 }
