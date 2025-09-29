@@ -15,19 +15,19 @@ export default class Camera {
     this.worldHalfX = (WORLD_WIDTH * TILE_SIZE) / 2;
     this.worldHalfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
 
-    // Perspective camera
+    // Use FULL window height for aspect (no *0.6)
     this.threeCamera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / (window.innerHeight * 0.6),
+      60, // FOV
+      window.innerWidth / window.innerHeight,
       0.1,
-      Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE * 2 // far plane covers terrain
+      Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE * 2
     );
 
-    // Orbit-style properties (old PWA style)
+    // Orbit-style properties
     this.target        = null;
-    this.orbitAngle    = Math.PI / 4; // 45°
-    this.orbitDistance = 6;           // zoom
-    this.cameraHeight  = 3;           // height above ground
+    this.orbitAngle    = Math.PI / 4;
+    this.orbitDistance = 6;
+    this.cameraHeight  = 3;
 
     this.minDistance = 4;
     this.maxDistance = 12;
@@ -37,7 +37,6 @@ export default class Camera {
     window.addEventListener('resize', this.handleResize, { passive: true });
     this.handleResize();
 
-    // Start pointed at center
     this.setTarget({ position: new THREE.Vector3(0, 0, 0) });
   }
 
@@ -50,22 +49,16 @@ export default class Camera {
     if (!this.target) return;
 
     const tp = this.target.position.clone();
-
-    // Clamp target within world bounds
     tp.x = THREE.MathUtils.clamp(tp.x, -this.worldHalfX, this.worldHalfX);
     tp.z = THREE.MathUtils.clamp(tp.z, -this.worldHalfZ, this.worldHalfZ);
 
-    // Clamp zoom
     this.orbitDistance = THREE.MathUtils.clamp(this.orbitDistance, this.minDistance, this.maxDistance);
 
-    // Compute orbit offset
     const ideal = new THREE.Vector3(
       tp.x + this.orbitDistance * Math.sin(this.orbitAngle),
       tp.y + this.cameraHeight,
       tp.z + this.orbitDistance * Math.cos(this.orbitAngle)
     );
-
-    // Clamp camera position inside terrain too
     ideal.x = THREE.MathUtils.clamp(ideal.x, -this.worldHalfX, this.worldHalfX);
     ideal.z = THREE.MathUtils.clamp(ideal.z, -this.worldHalfZ, this.worldHalfZ);
 
@@ -74,7 +67,8 @@ export default class Camera {
   }
 
   handleResize = () => {
-    this.threeCamera.aspect = window.innerWidth / (window.innerHeight * 0.6);
+    // FIX: full height here too
+    this.threeCamera.aspect = window.innerWidth / window.innerHeight;
     this.threeCamera.updateProjectionMatrix();
   };
 }
