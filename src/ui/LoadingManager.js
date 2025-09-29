@@ -6,12 +6,23 @@ export default class LoadingManager {
     constructor() {
         this.hasFailed = false;
         this.loadedModules = new Map();
-        this._createDOM();
-        this._cacheDOMElements();
-        Debugger.log('Loading Manager initialized.');
+        
+        try {
+            this._createDOM();
+            this._cacheDOMElements();
+            Debugger.log('Loading Manager initialized.');
+        } catch (err) {
+            // This will catch errors if the DOM elements can't be found
+            this.hasFailed = true;
+            Debugger.error('Failed to create or cache loading screen DOM.', err);
+            // Display a fallback error message if the UI fails to build
+            document.body.innerHTML = `<div style="color: red; font-family: sans-serif; padding: 2em;">Critical Error: Loading UI failed to build. Check the console.</div>`;
+        }
     }
 
     async start(engineInstance) {
+        if (this.hasFailed) return; // Don't start if the constructor failed
+
         const manifest = engineInstance.getManifest();
         if (!manifest || manifest.length === 0) {
             return this.fail(new Error('Manifest is empty or invalid.'));
@@ -58,6 +69,7 @@ export default class LoadingManager {
     }
 
     _showStartButton() {
+        if (this.hasFailed) return;
         this.startButton.disabled = false;
         this.startButton.addEventListener('click', () => {
             Viewport.instance?.beginRenderLoop();
@@ -74,10 +86,12 @@ export default class LoadingManager {
         
         Debugger.error(errorMessage, error.stack);
         
-        this.statusElement.textContent = 'Fatal Error';
-        this.progressBar.style.width = '100%';
-        this.progressBar.style.backgroundColor = '#c94a4a';
-        this.percentEl.textContent = 'FAIL';
+        if (this.statusElement) {
+            this.statusElement.textContent = 'Fatal Error';
+            this.progressBar.style.width = '100%';
+            this.progressBar.style.backgroundColor = '#c94a4a';
+            this.percentEl.textContent = 'FAIL';
+        }
     }
 
     _updateProgress(message, progress, isComplete = false) {
@@ -92,6 +106,22 @@ export default class LoadingManager {
     }
 
     _cacheDOMElements() {
+        const requiredIds = [
+            'game-loading-screen',
+            'game-loading-bar-fill',
+            'game-loading-percent',
+            'game-loading-status',
+            'game-start-button'
+        ];
+        
+        for (const id of requiredIds) {
+            const element = document.getElementById(id);
+            if (!element) {
+                // This error is specific and will tell you exactly what's wrong.
+                throw new Error(`Could not find required loading element with ID: #${id}`);
+            }
+        }
+
         this.loadingScreen = document.getElementById('game-loading-screen');
         this.progressBar = document.getElementById('game-loading-bar-fill');
         this.percentEl = document.getElementById('game-loading-percent');
@@ -102,25 +132,28 @@ export default class LoadingManager {
     _createDOM() {
         const style = `
             #game-loading-screen { position: fixed; inset: 0; background-color: #1a1612; z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: sans-serif; color: #f5eeda; transition: opacity 1s ease; }
-            #game-loading-screen.fade-out { opacity: 0; }
+            #game-loading-screen.fade-out { opacity: 0; pointer-events: none; }
             #game-loading-content { width: 90%; max-width: 400px; text-align: center; }
             h1 { color: #e88b33; }
-            #game-loading-bar { width: 100%; height: 8px; background-color: #333; border-radius: 4px; overflow: hidden; margin: 1em 0; }
+            #game-loading-bar-container { width: 100%; height: 8px; background-color: #333; border-radius: 4px; overflow: hidden; margin: 1em 0; position: relative; }
             #game-loading-bar-fill { width: 0%; height: 100%; background-color: #e88b33; transition: width 0.3s ease, background-color 0.3s ease; }
+            #game-loading-percent { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 10px; color: white; text-shadow: 1px 1px 1px #000; }
             #game-loading-status { margin-bottom: 1.5em; height: 1.2em; }
             #game-start-button { padding: 10px 20px; font-size: 16px; background-color: #e88b33; color: #1a1612; border: none; border-radius: 5px; cursor: pointer; }
             #game-start-button:disabled { background-color: #555; cursor: not-allowed; }
         `;
         document.head.insertAdjacentHTML('beforeend', `<style>${style}</style>`);
+        
+        // This HTML is simplified and corrected to ensure it parses correctly.
         document.body.insertAdjacentHTML('afterbegin', `
             <div id="game-loading-screen">
                 <div id="game-loading-content">
                     <h1>Loading Game</h1>
-                    <div id="game-loading-status-container">
-                        <p id="game-loading-status">Initializing...</p>
+                    <p id="game-loading-status">Initializing...</p>
+                    <div id="game-loading-bar-container">
+                        <div id="game-loading-bar-fill"></div>
                         <span id="game-loading-percent">0%</span>
                     </div>
-                    <div id="game-loading-bar"><div id="game-loading-bar-fill"></div></div>
                     <button id="game-start-button" disabled>Start</button>
                 </div>
             </div>
