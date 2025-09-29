@@ -1,0 +1,75 @@
+/* Exact visual styles from your provided launcher snippet */
+body {
+  font-family: 'Orbitron', sans-serif;
+  background-image: url('https://placehold.co/1920x1080/0a0a0a/444444?text=');
+  background-size: cover;
+  background-position: center;
+  color: #e0e0e0;
+  user-select: none;
+}
+
+/* Overlay host that covers the screen above the WebGL canvas */
+#dustborne-launcher-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+/* Allows fade-out on start */
+#dustborne-launcher-root.fade-out {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
+
+/* Matches your “glass-panel” look */
+.glass-panel {
+  background: rgba(10, 10, 10, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Matches your button styling */
+.btn-launcher {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+.btn-launcher:hover {
+  background-color: rgba(99, 102, 241, 0.8); /* Indigo */
+  border-color: rgba(99, 102, 241, 1);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Progress bar */
+.progress-bar-container {
+  background-color: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.progress-bar-fill {
+  background: linear-gradient(90deg, rgba(99,102,241,1) 0%, rgba(168,85,247,1) 100%);
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.7);
+}
+
+/* Version tag (exact) */
+#version-tag {
+  position: absolute;
+  bottom: 10px;
+  right: 15px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 1px;
+}
+
+/* Container widths (from your sample) */
+#launcherScreen { width: 100%; max-width: 32rem; }
+#loadingScreen  { width: 100%; max-width: 36rem; }
