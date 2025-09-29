@@ -6,22 +6,21 @@ export default class LoadingManager {
     constructor() {
         this.hasFailed = false;
         this.loadedModules = new Map();
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
         try {
             this._createDOM();
             this._cacheDOMElements();
             Debugger.log('Loading Manager initialized.');
         } catch (err) {
-            // This will catch errors if the DOM elements can't be found
             this.hasFailed = true;
             Debugger.error('Failed to create or cache loading screen DOM.', err);
-            // Display a fallback error message if the UI fails to build
             document.body.innerHTML = `<div style="color: red; font-family: sans-serif; padding: 2em;">Critical Error: Loading UI failed to build. Check the console.</div>`;
         }
     }
 
     async start(engineInstance) {
-        if (this.hasFailed) return; // Don't start if the constructor failed
+        if (this.hasFailed) return;
 
         const manifest = engineInstance.getManifest();
         if (!manifest || manifest.length === 0) {
@@ -29,11 +28,10 @@ export default class LoadingManager {
         }
 
         // Phase 1: Load all module files
-        this._updateProgress('Loading assets...', 0);
+        await this._appendTerminalLine('Loading assets...');
         for (let i = 0; i < manifest.length; i++) {
             const task = manifest[i];
-            const progress = ((i + 1) / manifest.length) * 50;
-            this._updateProgress(`Loading: ${task.name}`, progress);
+            await this._appendTerminalLine(`Loading: ${task.name}`);
             try {
                 const mod = await import(task.path);
                 this.loadedModules.set(task.path, mod);
@@ -43,11 +41,10 @@ export default class LoadingManager {
         }
         
         // Phase 2: Initialize modules in order
-        this._updateProgress('Initializing systems...', 50);
+        await this._appendTerminalLine('Initializing systems...');
         for (let i = 0; i < manifest.length; i++) {
             const task = manifest[i];
-            const progress = 50 + ((i + 1) / manifest.length) * 50;
-            this._updateProgress(`Initializing: ${task.name}`, progress);
+            await this._appendTerminalLine(`Initializing: ${task.name}`);
             
             const module = this.loadedModules.get(task.path);
             if (!module) {
@@ -66,8 +63,28 @@ export default class LoadingManager {
             }
         }
 
-        this._updateProgress('Ready', 100, true);
+        await this._appendTerminalLine('Ready');
         this._showStartButton();
+    }
+
+    async _appendTerminalLine(message) {
+        if (this.hasFailed) return;
+        const line = document.createElement('p');
+        line.className = 'terminal-line';
+        line.textContent = message;
+        this.terminalOutput.appendChild(line);
+        this._playBeep();
+        // Trigger typing animation (CSS handles it)
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay for typing
+    }
+
+    _playBeep() {
+        const oscillator = this.audioContext.createOscillator();
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime); // A4 note
+        oscillator.connect(this.audioContext.destination);
+        oscillator.start();
+        setTimeout(() => oscillator.stop(), 100);
     }
 
     _showStartButton() {
@@ -89,14 +106,11 @@ export default class LoadingManager {
         
         Debugger.error(errorMessage, error.stack);
         
-        if (this.statusElement) {
-            this.statusElement.textContent = 'Fatal Error';
-            this.progressBar.style.width = '100%';
-            this.progressBar.style.backgroundColor = '#c94a4a';
-            this.percentEl.textContent = 'FAIL';
-        }
+        const errorLine = document.createElement('p');
+        errorLine.className = 'terminal-line error';
+        errorLine.textContent = 'Fatal Error: ' + errorMessage;
+        this.terminalOutput.appendChild(errorLine);
 
-        // Advanced error display on loading screen
         if (this.errorDetails) {
             this.errorDetails.style.display = 'block';
             this.errorDetails.innerHTML = `
@@ -110,70 +124,39 @@ export default class LoadingManager {
         }
     }
 
-    _updateProgress(message, progress, isComplete = false) {
-        if (this.hasFailed) return;
-        this.statusElement.textContent = message;
-        const pct = Math.floor(Math.min(100, progress));
-        this.progressBar.style.width = `${pct}%`;
-        this.percentEl.textContent = `${pct}%`;
-        if (isComplete) {
-            this.progressBar.style.backgroundColor = '#64b964';
-        }
-    }
-
     _cacheDOMElements() {
-        const requiredIds = [
-            'game-loading-screen',
-            'game-loading-bar-fill',
-            'game-loading-percent',
-            'game-loading-status',
-            'game-start-button',
-            'error-details' // Added for advanced error display
-        ];
-        
-        for (const id of requiredIds) {
-            const element = document.getElementById(id);
-            if (!element) {
-                // This error is specific and will tell you exactly what's wrong.
-                throw new Error(`Could not find required loading element with ID: #${id}`);
-            }
-        }
-
         this.loadingScreen = document.getElementById('game-loading-screen');
-        this.progressBar = document.getElementById('game-loading-bar-fill');
-        this.percentEl = document.getElementById('game-loading-percent');
-        this.statusElement = document.getElementById('game-loading-status');
+        this.terminalOutput = document.getElementById('terminal-output');
         this.startButton = document.getElementById('game-start-button');
         this.errorDetails = document.getElementById('error-details');
     }
 
     _createDOM() {
         const style = `
-            #game-loading-screen { position: fixed; inset: 0; background-color: #1a1612; z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: sans-serif; color: #f5eeda; transition: opacity 1s ease; }
+            #game-loading-screen { position: fixed; inset: 0; background-color: #000; z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: 'VT323', monospace; color: #0f0; transition: opacity 1s ease; }
             #game-loading-screen.fade-out { opacity: 0; pointer-events: none; }
-            #game-loading-content { width: 90%; max-width: 400px; text-align: center; }
-            h1 { color: #e88b33; }
-            #game-loading-bar-container { width: 100%; height: 20px; background-color: #333; border-radius: 4px; overflow: hidden; margin: 1em 0; position: relative; }
-            #game-loading-bar-fill { width: 0%; height: 100%; background-color: #e88b33; transition: width 0.3s ease, background-color 0.3s ease; }
-            #game-loading-percent { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 10px; color: white; text-shadow: 1px 1px 1px #000; }
-            #game-loading-status { margin-bottom: 1.5em; height: 1.2em; }
-            #game-start-button { padding: 10px 20px; font-size: 16px; background-color: #e88b33; color: #1a1612; border: none; border-radius: 5px; cursor: pointer; }
-            #game-start-button:disabled { background-color: #555; cursor: not-allowed; }
-            #error-details { display: none; margin-top: 2em; text-align: left; background: #333; padding: 1em; border-radius: 5px; max-height: 300px; overflow: auto; }
-            #error-details pre { white-space: pre-wrap; word-wrap: break-word; }
+            #game-loading-content { width: 90%; max-width: 800px; height: 90%; position: relative; border: 2px solid #0f0; padding: 1em; box-shadow: 0 0 10px #0f0; }
+            h1 { color: #0f0; text-align: center; animation: flicker 0.15s infinite; }
+            #terminal-output { height: 70%; overflow-y: auto; }
+            .terminal-line { margin: 0; white-space: pre; animation: typing 1s steps(40, end), blink-caret 0.75s step-end infinite; overflow: hidden; border-right: .15em solid #0f0; }
+            .terminal-line.error { color: #f00; }
+            @keyframes typing { from { width: 0; } to { width: 100%; } }
+            @keyframes blink-caret { from, to { border-color: transparent; } 50% { border-color: #0f0; } }
+            @keyframes flicker { 50% { opacity: 0.5; } }
+            .scanline { width: 100%; height: 2px; background: rgba(255,255,255,0.2); position: absolute; top: 0; animation: scanline 6s linear infinite; }
+            @keyframes scanline { 0% { top: -2px; } 100% { top: 100%; } }
+            #game-start-button { padding: 10px 20px; font-size: 24px; background-color: #000; color: #0f0; border: 1px solid #0f0; cursor: pointer; display: block; margin: 1em auto; }
+            #game-start-button:disabled { color: #333; border-color: #333; cursor: not-allowed; }
+            #error-details { display: none; margin-top: 2em; text-align: left; background: #111; padding: 1em; border: 1px solid #f00; color: #f00; max-height: 200px; overflow: auto; }
         `;
         document.head.insertAdjacentHTML('beforeend', `<style>${style}</style>`);
         
-        // This HTML is simplified and corrected to ensure it parses correctly.
         document.body.insertAdjacentHTML('afterbegin', `
             <div id="game-loading-screen">
                 <div id="game-loading-content">
                     <h1>Duneborne</h1>
-                    <p id="game-loading-status">Initializing...</p>
-                    <div id="game-loading-bar-container">
-                        <div id="game-loading-bar-fill"></div>
-                        <span id="game-loading-percent">0%</span>
-                    </div>
+                    <div class="scanline"></div>
+                    <div id="terminal-output"></div>
                     <button id="game-start-button" disabled>Start</button>
                     <div id="error-details"></div>
                 </div>
