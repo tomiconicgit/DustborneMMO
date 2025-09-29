@@ -20,12 +20,9 @@ export default class TerrainGenerator {
       },
       vertexShader: `
         varying vec2 vUv;
-        #include <fog_pars_vertex>
         void main() {
           vUv = uv;
-          #include <begin_vertex>
-          #include <project_vertex>
-          #include <fog_vertex>
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
@@ -34,10 +31,6 @@ export default class TerrainGenerator {
         uniform vec3 gravelColor3;
         varying vec2 vUv;
 
-        // three.js fog
-        #include <fog_pars_fragment>
-
-        // Simple pseudo-random noise function
         float rand(vec2 n) {
           return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
         }
@@ -47,16 +40,14 @@ export default class TerrainGenerator {
           float noise = rand(floor(scaledUv));
 
           vec3 color;
-          if (noise < 0.4) { color = gravelColor1; }
-          else if (noise < 0.8) { color = gravelColor2; }
-          else { color = gravelColor3; }
+          if (noise < 0.4)      color = gravelColor1;
+          else if (noise < 0.8) color = gravelColor2;
+          else                  color = gravelColor3;
 
-          vec4 outColor = vec4(color, 1.0);
-          #include <fog_fragment>
-          gl_FragColor = outColor;
+          gl_FragColor = vec4(color, 1.0);
         }
-      `,
-      fog: true // important for ShaderMaterial
+      `
+      // fog: false (default) – terrain does NOT participate in fog
     });
 
     const groundMesh = new THREE.Mesh(geometry, material);
