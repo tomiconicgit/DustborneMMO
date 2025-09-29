@@ -1,5 +1,5 @@
 // file: src/game/EngineSetup.js
-import paths from '../router.js';
+import paths from '../Router.js';
 
 export default class EngineSetup {
     getManifest() {
