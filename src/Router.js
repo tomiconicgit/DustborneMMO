@@ -10,7 +10,6 @@ const paths = {
   camera:           mod('engine/rendering/Camera.js'),
   lighting:         mod('engine/rendering/Lighting.js'),
   sky:              mod('engine/rendering/Sky.js'),
-  horizonFog:       mod('engine/rendering/HorizonFog.js'), // NEW
 
   // Game
   engineSetup:      mod('game/EngineSetup.js'),
