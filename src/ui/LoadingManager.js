@@ -9,13 +9,16 @@ export default class LoadingManager {
     this.engineInstance = null;
 
     try {
-      this._buildOverlayDOM();     // Build launcher + loading screens
-      this._cacheDOMElements();    // Grab references
+      this._buildOverlayDOM();
+      this._cacheDOMElements();
       Debugger.log('Loading Manager initialized (launcher style).');
     } catch (err) {
       this.hasFailed = true;
       Debugger.error('Failed to build launcher/loading UI.', err);
-      document.body.innerHTML = `<div style="color: #f66; font-family: sans-serif; padding: 2em;">Critical Error: UI failed to build. See console.</div>`;
+      document.body.innerHTML =
+        `<div style="color: #f66; font-family: sans-serif; padding: 2em;">
+           Critical Error: UI failed to build. See console.
+         </div>`;
     }
   }
 
@@ -23,7 +26,6 @@ export default class LoadingManager {
     if (this.hasFailed) return;
     this.engineInstance = engineInstance;
 
-    // Show launcher screen initially
     this._show(this.launcherScreen);
     this._hide(this.loadingScreen);
 
@@ -33,11 +35,8 @@ export default class LoadingManager {
       this._beginBoot();
     });
 
-    this.optionsBtn?.addEventListener('click', () => {
-      Debugger.log('Options clicked (placeholder).');
-    });
-    this.exitBtn?.addEventListener('click', () => {
-      Debugger.log('Exit clicked (placeholder).');
+    this.accountBtn?.addEventListener('click', () => {
+      Debugger.log('Account clicked (placeholder).');
     });
   }
 
@@ -85,7 +84,9 @@ export default class LoadingManager {
           return this.fail(err, task);
         }
       } else {
-        Debugger.log(`Skipping initialization for ${task.name} (no create method)`);
+        Debugger.log(
+          `Skipping initialization for ${task.name} (no create method)`
+        );
       }
     }
 
@@ -152,8 +153,7 @@ export default class LoadingManager {
     this.loadingScreen  = document.getElementById('loadingScreen');
 
     this.startGameBtn   = document.getElementById('startGameBtn');
-    this.optionsBtn     = document.getElementById('optionsBtn');
-    this.exitBtn        = document.getElementById('exitBtn');
+    this.accountBtn     = document.getElementById('accountBtn');
 
     this.progressBar    = document.getElementById('progressBar');
     this.loadingStatus  = document.getElementById('loadingStatus');
@@ -164,13 +164,11 @@ export default class LoadingManager {
     const html = `
       <div id="dustborne-launcher-root" class="min-h-screen flex items-center justify-center overflow-hidden">
         <!-- Launcher/Main Menu Screen -->
-        <div id="launcherScreen" class="w-full max-w-md px-8 py-10 rounded-lg shadow-2xl glass-panel">
-          <h1 class="text-5xl font-black text-center text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2">DUSTBORNE</h1>
-          <p class="text-center text-indigo-300 mb-8">Main Menu</p>
+        <div id="launcherScreen" class="w-full max-w-sm px-8 py-12 rounded-lg shadow-2xl glass-panel">
+          <h1 class="text-5xl font-black text-center text-white mt-4 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-6">DUSTBORNE</h1>
           <div class="flex flex-col space-y-4">
             <button id="startGameBtn" class="w-full py-3 rounded-md btn-launcher">Start Game</button>
-            <button id="optionsBtn" class="w-full py-3 rounded-md btn-launcher">Options</button>
-            <button id="exitBtn" class="w-full py-3 rounded-md btn-launcher">Exit</button>
+            <button id="accountBtn" class="w-full py-3 rounded-md btn-launcher">Account</button>
           </div>
         </div>
 
