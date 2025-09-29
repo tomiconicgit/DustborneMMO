@@ -2,10 +2,10 @@
 import * as THREE from 'three';
 import Camera from '../rendering/Camera.js';
 import Viewport from '../core/Viewport.js';
+import Scene from '../core/Scene.js';
 
 export default class GroundPicker {
   static instance = null;
-
   static create() {
     if (!GroundPicker.instance) GroundPicker.instance = new GroundPicker();
   }
@@ -14,25 +14,26 @@ export default class GroundPicker {
     this.ray = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
     this.planeY0 = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y=0
+    this.ground = null; // cached "ProceduralGround"
   }
 
-  /** Returns the current renderer canvas, or null if not ready. */
   _canvas() {
     return Viewport.instance?.renderer?.domElement || null;
   }
 
-  /**
-   * Compute world point on y=0 plane from client coordinates,
-   * using the canvas element's bounding rect (NOT document/body).
-   */
+  _ensureGround() {
+    if (this.ground && this.ground.parent) return this.ground;
+    // Try to find the terrain once and cache it
+    this.ground = Scene.main?.getObjectByName('ProceduralGround') || null;
+    return this.ground;
+  }
+
   pick(clientX, clientY) {
     const cam = Camera.main?.threeCamera || Camera.main;
     const canvas = this._canvas();
     if (!cam || !canvas) return null;
 
     const rect = canvas.getBoundingClientRect();
-
-    // If the tap is outside the canvas rect, ignore.
     if (
       clientX < rect.left || clientX > rect.right ||
       clientY < rect.top  || clientY > rect.bottom
@@ -44,13 +45,21 @@ export default class GroundPicker {
     );
 
     this.ray.setFromCamera(this.ndc, cam);
-    const hit = new THREE.Vector3();
-    return this.ray.ray.intersectPlane(this.planeY0, hit) ? hit : null;
+
+    // Prefer precise hit against the ground mesh
+    const ground = this._ensureGround();
+    if (ground) {
+      const hits = this.ray.intersectObject(ground, true);
+      if (hits && hits.length) return hits[0].point.clone();
+    }
+
+    // Fallback: intersect y=0 plane
+    const p = new THREE.Vector3();
+    return this.ray.ray.intersectPlane(this.planeY0, p) ? p : null;
   }
 
-  /** Convenience: pick directly from a Pointer/Mouse/Touch event. */
   pickFromEvent(ev) {
-    const t = (ev.touches && ev.touches[0]) || ev.changedTouches?.[0] || ev;
+    const t = ev instanceof PointerEvent ? ev : (ev.touches?.[0] || ev.changedTouches?.[0]);
     if (!t) return null;
     return this.pick(t.clientX, t.clientY);
   }
