@@ -2,6 +2,8 @@
 import LoadingManager from './src/ui/LoadingManager.js';
 import EngineSetup from './src/game/EngineSetup.js';
 import Debugger from './src/debugger.js'; // This path is now correct
+window.addEventListener('error', (e) => Debugger.error('Window error', e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => Debugger.error('Unhandled rejection', e.reason));
 
 document.addEventListener('DOMContentLoaded', () => {
     Debugger.init();
