@@ -1,27 +1,14 @@
 // file: src/debugger.js
-import Stats from 'three/addons/libs/stats.module.js';
-
-let stats;
-
 export default class Debugger {
-    static init() {
-        stats = new Stats();
-        document.body.appendChild(stats.dom);
-    }
-    
-    static update() {
-        stats?.update();
-    }
+  static init() {
+    // No FPS/Stats panel; keep console-only logging.
+  }
 
-    static log(message, ...optionalParams) {
-        console.log(`[INFO] ${message}`, ...optionalParams);
-    }
+  static update() {
+    // noop
+  }
 
-    static warn(message, ...optionalParams) {
-        console.warn(`[WARN] ${message}`, ...optionalParams);
-    }
-
-    static error(message, ...optionalParams) {
-        console.error(`[ERROR] ${message}`, ...optionalParams);
-    }
+  static log(message, ...optional)   { console.log(`[INFO] ${message}`, ...optional); }
+  static warn(message, ...optional)  { console.warn(`[WARN] ${message}`, ...optional); }
+  static error(message, ...optional) { console.error(`[ERROR] ${message}`, ...optional); }
 }
