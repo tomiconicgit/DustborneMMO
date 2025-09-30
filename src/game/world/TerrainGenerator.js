@@ -4,9 +4,10 @@ import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from './WorldMap.js';
 
 export default class TerrainGenerator {
   static create() {
-    const width = WORLD_WIDTH * TILE_SIZE;
-    const depth = WORLD_DEPTH * TILE_SIZE;
+    const width = WORLD_WIDTH * TILE_SIZE;   // 30
+    const depth = WORLD_DEPTH * TILE_SIZE;   // 30
 
+    // Subdivisions aligned to tiles for crisp raycast across the whole grid
     const geometry = new THREE.PlaneGeometry(width, depth, WORLD_WIDTH, WORLD_DEPTH);
 
     const material = new THREE.ShaderMaterial({
@@ -43,14 +44,14 @@ export default class TerrainGenerator {
 
           gl_FragColor = vec4(color, 1.0);
         }
-      `,
+      `
     });
 
     const groundMesh = new THREE.Mesh(geometry, material);
     groundMesh.rotation.x = -Math.PI / 2;
-    groundMesh.name = "ProceduralGround";
+    groundMesh.name = 'ProceduralGround';
 
-    // ✅ shift so (0,0) tile is bottom-left, not center
+    // ✅ World coordinates: 0..30 on X/Z. Put the plane so (0,0) is bottom-left.
     groundMesh.position.set(width / 2, 0, depth / 2);
 
     return groundMesh;
