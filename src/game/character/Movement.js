@@ -24,21 +24,51 @@ export default class Movement {
     this.halfX = (WORLD_WIDTH * TILE_SIZE) * 0.5;
     this.halfZ = (WORLD_DEPTH * TILE_SIZE) * 0.5;
 
-    // Scratch vectors to avoid allocs
+    // Scratch vectors
     this._fwd = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._dir = new THREE.Vector3();
+
+    // --- NEW: lock camera-relative basis for the duration of a drag ---
+    this._lockedFwd = null;
+    this._lockedRight = null;
+
+    window.addEventListener('joystick:start', this._lockBasis);
+    window.addEventListener('joystick:end',   this._unlockBasis);
 
     // Per-frame update
     this._unsub = UpdateBus.on((dt) => this.update(dt));
   }
 
+  _computeCameraBasisXZ(outFwd, outRight) {
+    const camObj = Camera.main?.threeCamera || Camera.main;
+    if (!camObj) { outFwd.set(0,0,-1); outRight.set(1,0,0); return; }
+
+    // Screen "forward" = camera -Z projected to XZ plane
+    outFwd.set(0,0,-1).applyQuaternion(camObj.quaternion);
+    outFwd.y = 0;
+    if (outFwd.lengthSq() > 0) outFwd.normalize(); else outFwd.set(0,0,-1);
+
+    // Screen "right" = perpendicular on XZ
+    outRight.set(outFwd.z, 0, -outFwd.x);
+  }
+
+  _lockBasis = () => {
+    if (!this._lockedFwd)  this._lockedFwd  = new THREE.Vector3();
+    if (!this._lockedRight) this._lockedRight = new THREE.Vector3();
+    this._computeCameraBasisXZ(this._lockedFwd, this._lockedRight);
+  };
+
+  _unlockBasis = () => {
+    this._lockedFwd = null;
+    this._lockedRight = null;
+  };
+
   update(dt) {
     const ch        = Character.instance?.object3D;
     const animator  = CharacterAnimator.main;
     const modelRoot = animator?.modelRoot;
-    const camObj    = Camera.main?.threeCamera || Camera.main;
-    if (!ch || !animator || !modelRoot || !camObj) return;
+    if (!ch || !animator || !modelRoot) return;
 
     // Animate mixer
     animator.update(dt);
@@ -50,14 +80,13 @@ export default class Movement {
     let isMoving = false;
 
     if (mag > 0.08) {
-      // --- CAMERA-RELATIVE MOVE ---
-      // Camera forward projected onto XZ as "screen forward"
-      this._fwd.set(0,0, -1).applyQuaternion(camObj.quaternion); // cam -Z
-      this._fwd.y = 0;
-      if (this._fwd.lengthSq() > 0) this._fwd.normalize(); else this._fwd.set(0,0,-1);
-
-      // Right vector in XZ plane
-      this._right.set(this._fwd.z, 0, -this._fwd.x); // perpendicular on XZ
+      // Use locked basis if dragging; else compute fresh (so taps between gestures follow current camera)
+      if (this._lockedFwd && this._lockedRight) {
+        this._fwd.copy(this._lockedFwd);
+        this._right.copy(this._lockedRight);
+      } else {
+        this._computeCameraBasisXZ(this._fwd, this._right);
+      }
 
       // Combine joystick axes: dir = right*x + forward*y
       this._dir.copy(this._right).multiplyScalar(v.x).addScaledVector(this._fwd, v.y);
