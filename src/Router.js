@@ -37,7 +37,7 @@ const paths = {
   // UI
   inventoryUI:      mod('ui/inventory.js'),
 
-  // NEW: Procedural 2D inventory icons
+  // NEW: procedural inventory icons
   itemIcons:        mod('ui/ItemIcons.js'),
 };
 
