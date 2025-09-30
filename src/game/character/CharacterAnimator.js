@@ -15,15 +15,10 @@ export default class CharacterAnimator {
     this.mixer = null;
     this.modelRoot = null;
 
-    // animation clips/actions
-    this.walkClip = null;
-    this.walkAction = null;
-    this.idleClip = null;
-    this.idleAction = null;
-
-    // mining (optional)
-    this.miningClip = null;
-    this.miningAction = null;
+    // clips/actions
+    this.walkClip = null;   this.walkAction = null;
+    this.idleClip = null;   this.idleAction = null;
+    this.miningClip = null; this.miningAction = null;
 
     this.active = null; // "walk" | "idle" | "mining" | null
   }
@@ -32,14 +27,13 @@ export default class CharacterAnimator {
     const root = Character.instance?.object3D;
     if (!root) throw new Error('CharacterAnimator requires Character.instance');
 
-    // The model root (skinned mesh group) is the first child under Character.object3D
     this.modelRoot = root.children[0];
     if (!this.modelRoot) throw new Error('Character model not found for animator.');
 
     this.mixer = new THREE.AnimationMixer(this.modelRoot);
     const loader = new GLTFLoader();
 
-    // Load walking animation
+    // walk
     {
       const url = new URL('../../assets/models/character/anim-walking.glb', import.meta.url).href;
       const gltf = await loader.loadAsync(url);
@@ -47,13 +41,12 @@ export default class CharacterAnimator {
       if (this.walkClip) {
         this.walkAction = this.mixer.clipAction(this.walkClip);
         this.walkAction.setLoop(THREE.LoopRepeat, Infinity);
-        this.walkAction.clampWhenFinished = false;
         this.walkAction.enabled = true;
         this.walkAction.weight = 1.0;
       }
     }
 
-    // Load idle animation
+    // idle
     {
       const url = new URL('../../assets/models/character/anim-idle.glb', import.meta.url).href;
       const gltf = await loader.loadAsync(url);
@@ -61,13 +54,12 @@ export default class CharacterAnimator {
       if (this.idleClip) {
         this.idleAction = this.mixer.clipAction(this.idleClip);
         this.idleAction.setLoop(THREE.LoopRepeat, Infinity);
-        this.idleAction.clampWhenFinished = false;
         this.idleAction.enabled = true;
         this.idleAction.weight = 1.0;
       }
     }
 
-    // Load mining animation (OPTIONAL – won’t break if missing)
+    // mining (optional)
     try {
       const url = new URL('../../assets/models/character/anim-mining.glb', import.meta.url).href;
       const gltf = await loader.loadAsync(url);
@@ -75,23 +67,19 @@ export default class CharacterAnimator {
       if (this.miningClip) {
         this.miningAction = this.mixer.clipAction(this.miningClip);
         this.miningAction.setLoop(THREE.LoopRepeat, Infinity);
-        this.miningAction.clampWhenFinished = false;
         this.miningAction.enabled = true;
         this.miningAction.weight = 1.0;
       }
     } catch (err) {
-      console.warn('[Animator] Mining animation missing/failed to load (continuing):', err?.message || err);
+      console.warn('[Animator] Mining animation missing/failed to load:', err?.message || err);
       this.miningClip = null;
       this.miningAction = null;
     }
 
-    // Start with idle by default
     this.playIdle();
   }
 
-  update(dt) {
-    if (this.mixer) this.mixer.update(dt);
-  }
+  update(dt) { if (this.mixer) this.mixer.update(dt); }
 
   playWalk() {
     if (!this.walkAction) return;
@@ -108,27 +96,22 @@ export default class CharacterAnimator {
   }
 
   playMining() {
-    if (!this.miningAction) return; // gracefully do nothing if optional anim missing
+    if (!this.miningAction) return;
     if (this.active === 'mining') return;
     this._fadeTo(this.miningAction, 0.15);
     this.active = 'mining';
   }
 
-  /**
-   * Force the mining animation to restart from time 0,
-   * while keeping 'mining' active (used after every ore hit).
-   */
+  /** Force the current mining loop to restart from time 0 (without leaving mining state). */
   restartMiningLoop() {
     if (!this.miningAction) return;
     if (this.active !== 'mining') {
-      // If we somehow aren't in mining, switch to it.
-      this._fadeTo(this.miningAction, 0.1);
-      this.active = 'mining';
+      this.playMining();
       return;
     }
-    // Already mining: rewind cleanly without re-fading.
-    this.miningAction.reset(); // sets time=0 and enables
-    this.miningAction.play();
+    // reset to start and keep playing
+    this.miningAction.stop();
+    this.miningAction.reset().play();
   }
 
   stopAll() {
