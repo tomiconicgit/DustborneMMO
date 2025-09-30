@@ -60,6 +60,8 @@ export default class VirtualJoystick {
     if (this.activeId !== null) return;
     this.activeId = e.pointerId;
     this.root.setPointerCapture?.(e.pointerId);
+    // Signal the start of a joystick gesture so movement can lock camera basis
+    window.dispatchEvent(new Event('joystick:start'));
     this._updateFrom(e);
   };
 
@@ -76,6 +78,7 @@ export default class VirtualJoystick {
     this.knob.style.transform = 'translate(0px, 0px)';
     this.root.releasePointerCapture?.(e.pointerId);
     window.dispatchEvent(new CustomEvent('joystick:change', { detail: { x: 0, y: 0 } }));
+    // Signal end so movement can unlock basis
     window.dispatchEvent(new Event('joystick:end'));
   };
 
