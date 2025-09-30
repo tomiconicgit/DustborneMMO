@@ -4,6 +4,7 @@ import UpdateBus from '../../engine/core/UpdateBus.js';
 import Character from '../character/Character.js';
 import CharacterAnimator from '../character/CharacterAnimator.js';
 import Movement from '../character/Movement.js';
+import SoundManager from '../../engine/audio/SoundManager.js';
 import { TILE_SIZE } from '../world/WorldMap.js';
 
 export default class CopperOre {
@@ -28,7 +29,11 @@ export default class CopperOre {
     this.respawnDelay = 15; // seconds
     this.respawnTimer = 0;
 
+    // One mining "cycle" timer:
+    // - at 1.8s -> play hit sound
+    // - at 2.0s -> apply hit (damage + loot) and restart loop
     this._mineClock = 0;
+    this._playedHitSfxInCycle = false;
 
     // Make sure all child meshes can be recognized as this ore
     this.mesh.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = this; });
@@ -86,11 +91,12 @@ export default class CopperOre {
       modelRoot.rotation.set(0, yaw, 0);
     }
 
-    // Play mining animation loop (if available), else just stay idle
+    // Play mining animation loop (if available)
     CharacterAnimator.main?.playMining?.();
 
-    // Reset cadence timer
+    // Reset cadence timer & sound flag
     this._mineClock = 0;
+    this._playedHitSfxInCycle = false;
   }
 
   update(dt) {
@@ -101,11 +107,20 @@ export default class CopperOre {
       return;
     }
 
-    // If mining anim is active, apply timed hits
+    // If mining anim is active, run the cycle timers
     if (CharacterAnimator.main?.active === 'mining') {
       this._mineClock += dt;
-      if (this._mineClock >= 2.0) { // one hit every ~2s
+
+      // 1.8s into the loop -> play hit SFX once
+      if (!this._playedHitSfxInCycle && this._mineClock >= 1.8) {
+        this._playedHitSfxInCycle = true;
+        SoundManager.main?.play('mining-hit', 0.9);
+      }
+
+      // 2.0s -> apply hit and restart cycle
+      if (this._mineClock >= 2.0) {
         this._mineClock = 0;
+        this._playedHitSfxInCycle = false;
         this._applyMiningHit();
       }
     }
@@ -124,15 +139,13 @@ export default class CopperOre {
     if (this.health <= 0) {
       this._deplete();
     } else {
-      // Restart both the animation **and** the cadence timer, continue mining
-      this._mineClock = 0;
+      // Restart the visible animation loop for a fresh swing
       CharacterAnimator.main?.restartMiningLoop?.();
     }
   }
 
   _giveCopper(count) {
-    // TODO: hook into a real inventory model later. For now, drop a counter in slot 1 if UI exists.
-    console.log(`+${count} Copper Ore`);
+    // TODO: replace with real inventory logic later.
     const slot = document.querySelector('.inv-grid .inv-slot');
     if (slot) {
       const current = parseInt(slot.textContent || '0', 10) || 0;
@@ -144,6 +157,10 @@ export default class CopperOre {
     this.isDepleted = true;
     this.mesh.visible = false;
     this.respawnTimer = this.respawnDelay;
+
+    // SFX for depletion
+    SoundManager.main?.play('rock-deplete', 1.0);
+
     // Stop mining if we just depleted the node
     CharacterAnimator.main?.playIdle?.();
   }
@@ -152,6 +169,8 @@ export default class CopperOre {
     this.isDepleted = false;
     this.health = this.maxHealth;
     this.mesh.visible = true;
-    console.log('Copper ore respawned at same spot.');
+    // Reset cycle flags in case the player is still nearby
+    this._mineClock = 0;
+    this._playedHitSfxInCycle = false;
   }
 }
