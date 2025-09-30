@@ -11,8 +11,9 @@ const paths = {
   camera:           mod('engine/rendering/Camera.js'),
   lighting:         mod('engine/rendering/Lighting.js'),
   sky:              mod('engine/rendering/Sky.js'),
+  occlusionFader:   mod('engine/rendering/OcclusionFader.js'),   // ← NEW
 
-  // Input (tap-to-move + orbit/pinch)
+  // Input
   groundPicker:     mod('engine/input/GroundPicker.js'),
   cameraControls:   mod('engine/input/CameraTouchControls.js'),
 
@@ -26,7 +27,7 @@ const paths = {
   character:        mod('game/character/Character.js'),
   characterAnimator:mod('game/character/CharacterAnimator.js'),
 
-  // Movement (tap-to-move) & pathfinding
+  // Movement & pathfinding
   movement:         mod('game/character/Movement.js'),
   pathfinding:      mod('engine/lib/Pathfinding.js'),
 
@@ -36,9 +37,6 @@ const paths = {
 
   // UI
   inventoryUI:      mod('ui/inventory.js'),
-
-  // NEW: procedural inventory icons
-  itemIcons:        mod('ui/ItemIcons.js'),
 };
 
 export default paths;
