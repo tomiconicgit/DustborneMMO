@@ -4,16 +4,13 @@ import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from './WorldMap.js';
 
 export default class TerrainGenerator {
   static create() {
-    const geometry = new THREE.PlaneGeometry(
-      WORLD_WIDTH * TILE_SIZE,
-      WORLD_DEPTH * TILE_SIZE,
-      WORLD_WIDTH,
-      WORLD_DEPTH
-    );
+    const width = WORLD_WIDTH * TILE_SIZE;
+    const depth = WORLD_DEPTH * TILE_SIZE;
+
+    const geometry = new THREE.PlaneGeometry(width, depth, WORLD_WIDTH, WORLD_DEPTH);
 
     const material = new THREE.ShaderMaterial({
       uniforms: {
-        time: { value: 1.0 },
         gravelColor1: { value: new THREE.Color(0x555555) },
         gravelColor2: { value: new THREE.Color(0x3a3a3a) },
         gravelColor3: { value: new THREE.Color(0x4a413b) },
@@ -46,13 +43,16 @@ export default class TerrainGenerator {
 
           gl_FragColor = vec4(color, 1.0);
         }
-      `
-      // fog: false (default) – terrain does NOT participate in fog
+      `,
     });
 
     const groundMesh = new THREE.Mesh(geometry, material);
     groundMesh.rotation.x = -Math.PI / 2;
     groundMesh.name = "ProceduralGround";
+
+    // ✅ shift so (0,0) tile is bottom-left, not center
+    groundMesh.position.set(width / 2, 0, depth / 2);
+
     return groundMesh;
   }
 }
