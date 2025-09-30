@@ -19,6 +19,9 @@ export default class Movement {
     this.path = [];
     this.pathIndex = 0;
 
+    // Optional arrival callback (used by mining)
+    this._onArrive = null;
+
     // Movement tuning
     this.speed = 2.6;          // units / sec
     this.arriveEps = 0.04;     // how close is "reached"
@@ -42,7 +45,22 @@ export default class Movement {
   }
 
   // -----------------------
-  // Input → plan a new path
+  // External helper: walk to a world position (center of tile, etc.) then callback
+  // -----------------------
+  walkTo(pos, onArrive) {
+    const ch = Character.instance?.object3D;
+    if (!ch || !pos) return;
+
+    const newPath = this.pf.findPath(ch.position, pos);
+    if (newPath && newPath.length) {
+      this._setPath(newPath, ch.position);
+      this._onArrive = typeof onArrive === 'function' ? onArrive : null;
+      CharacterAnimator.main?.playWalk?.();
+    }
+  }
+
+  // -----------------------
+  // Input → plan a new path from tap
   // -----------------------
   onGroundTap = (ev) => {
     const hit = ev?.detail?.point;
@@ -52,6 +70,7 @@ export default class Movement {
     const newPath = this.pf.findPath(ch.position, hit);
     if (newPath && newPath.length > 0) {
       this._setPath(newPath, ch.position);
+      this._onArrive = null; // no special callback for generic move
       CharacterAnimator.main?.playWalk?.();
     }
   };
@@ -93,8 +112,9 @@ export default class Movement {
         // Waypoint reached → advance
         this.pathIndex++;
         if (this.pathIndex >= this.path.length) {
-          // Final destination reached → idle
+          // Final destination reached → idle and fire callback
           this._finish(animator);
+          if (this._onArrive) { const cb = this._onArrive; this._onArrive = null; try { cb(); } catch {} }
           return;
         }
       } else if (dist > 0) {
@@ -116,30 +136,31 @@ export default class Movement {
         // Ensure we are walking while moving
         animator.playWalk();
 
-        // Stuck detection: accumulate actual movement every frame
+        // Stuck detection
         const movedThisFrame = ch.position.distanceTo(this._lastPos);
         this._movedAcc += movedThisFrame;
         this._lastPos.copy(ch.position);
         this._stuckClock += dt;
 
-        // If after ~1.2s we've hardly moved, nudge to next waypoint (or finish)
         if (this._stuckClock > 1.2) {
           if (this._movedAcc < 0.02) {
-            // Skip this waypoint; try the next one
+            // Skip stuck waypoint
             this.pathIndex++;
             if (this.pathIndex >= this.path.length) {
               this._finish(animator);
+              if (this._onArrive) { const cb = this._onArrive; this._onArrive = null; try { cb(); } catch {} }
               return;
             }
           }
-          // Reset stuck window
           this._stuckClock = 0;
           this._movedAcc = 0;
         }
       }
     } else {
-      // No path → idle loop
-      animator.playIdle();
+      // No path → keep current (mining) or idle
+      if (animator.active !== 'mining') {
+        animator.playIdle();
+      }
     }
 
     // Update camera (free orbit—no auto follow)
@@ -154,7 +175,8 @@ export default class Movement {
     this.pathIndex = 0;
     this._stuckClock = 0;
     this._movedAcc = 0;
-    animator.playIdle();
+    // Only switch to idle if not mining; mining start will take over when needed
+    if (animator.active !== 'mining') animator.playIdle();
   }
 
   _lerpAngle(a, b, t) {
