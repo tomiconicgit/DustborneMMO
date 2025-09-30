@@ -12,8 +12,6 @@ export default class CopperOre {
   static createFromMesh(mesh, tileX, tileZ) {
     const ore = new CopperOre(mesh, tileX, tileZ);
     CopperOre.all.set(mesh.uuid, ore);
-    // make it discoverable by raycasts
-    mesh.userData.ore = ore;
     return ore;
   }
 
@@ -22,35 +20,36 @@ export default class CopperOre {
     this.tileX = tileX;
     this.tileZ = tileZ;
 
-    // simple tuning for wooden pickaxe @ prospecting lvl 1
+    // Simple balance for a wooden pickaxe (level 1 prospecting placeholder)
     this.maxHealth = 3;
     this.health = this.maxHealth;
 
     this.isDepleted = false;
-    this.respawnDelay = 15;  // seconds
-    this._respawnTimer = 0;
+    this.respawnDelay = 15; // seconds
+    this.respawnTimer = 0;
 
-    this._mining = false;
-    this._mineClock = 0;     // seconds accumulated since last hit
+    this._mineClock = 0;
 
+    // Bind for ray hit
+    this.mesh.userData.ore = this;
+
+    // Per-frame updates
     this._unsub = UpdateBus.on((dt) => this.update(dt));
   }
 
-  /** User tapped this ore. Walk next to it and begin mining. */
   onTapped() {
     if (this.isDepleted) return;
 
+    // Player target: nearest adjacent tile (4-way). Pick the closest of the four.
     const ch = Character.instance?.object3D;
     if (!ch) return;
 
-    // World center of the ore's tile
     const oreCenter = new THREE.Vector3(
       (this.tileX + 0.5) * TILE_SIZE,
       0,
       (this.tileZ + 0.5) * TILE_SIZE
     );
 
-    // Choose the nearest adjacent tile (4-way) to stand on
     const candidates = [
       { x: this.tileX + 1, z: this.tileZ     },
       { x: this.tileX - 1, z: this.tileZ     },
@@ -58,22 +57,19 @@ export default class CopperOre {
       { x: this.tileX,     z: this.tileZ - 1 },
     ];
 
-    // Sort by distance to current player pos
-    candidates.sort((a, b) => {
-      const aw = new THREE.Vector3((a.x + 0.5) * TILE_SIZE, 0, (a.z + 0.5) * TILE_SIZE);
-      const bw = new THREE.Vector3((b.x + 0.5) * TILE_SIZE, 0, (b.z + 0.5) * TILE_SIZE);
-      return ch.position.distanceToSquared(aw) - ch.position.distanceToSquared(bw);
-    });
-
-    // Try each candidate until a path succeeds
-    const tryNext = (i = 0) => {
-      if (i >= candidates.length) return; // give up silently
+    // Choose closest candidate in world space
+    let best = null;
+    let bestDist = Infinity;
+    for (let i = 0; i < candidates.length; i++) {
       const c = candidates[i];
-      const stand = new THREE.Vector3((c.x + 0.5) * TILE_SIZE, 0, (c.z + 0.5) * TILE_SIZE);
-      Movement.main?.walkTo(stand, () => this._beginMining(), /*onFail*/ () => tryNext(i + 1));
-    };
+      const wp = new THREE.Vector3((c.x + 0.5) * TILE_SIZE, 0, (c.z + 0.5) * TILE_SIZE);
+      const d = wp.distanceToSquared(ch.position);
+      if (d < bestDist) { bestDist = d; best = { ...c, world: wp }; }
+    }
+    const standPos = best?.world || oreCenter.clone().add(new THREE.Vector3(TILE_SIZE, 0, 0));
 
-    tryNext(0);
+    // Walk there, then start mining
+    Movement.main?.walkTo(standPos, () => this._beginMining());
   }
 
   _beginMining() {
@@ -84,33 +80,35 @@ export default class CopperOre {
     if (!ch || !modelRoot) return;
 
     // Face the ore
-    const target = new THREE.Vector3(
-      (this.tileX + 0.5) * TILE_SIZE - ch.position.x,
+    const orePos = new THREE.Vector3(
+      (this.tileX + 0.5) * TILE_SIZE,
       0,
-      (this.tileZ + 0.5) * TILE_SIZE - ch.position.z
+      (this.tileZ + 0.5) * TILE_SIZE
     );
-    const yaw = Math.atan2(target.x, target.z);
+    const dir = new THREE.Vector3().subVectors(orePos, ch.position);
+    dir.y = 0;
+    const yaw = Math.atan2(dir.x, dir.z);
     modelRoot.rotation.set(0, yaw, 0);
 
-    // Start / restart the mining loop animation
+    // Play mining animation loop
     CharacterAnimator.main?.playMining();
-    this._mining = true;
+
+    // Reset tick
     this._mineClock = 0;
   }
 
   update(dt) {
+    // Handle respawn
     if (this.isDepleted) {
-      // countdown to respawn
-      this._respawnTimer -= dt;
-      if (this._respawnTimer <= 0) this._respawn();
+      this.respawnTimer -= dt;
+      if (this.respawnTimer <= 0) this._respawn();
       return;
     }
 
-    // Only tick mining damage if we’re currently in the mining state
-    if (this._mining && CharacterAnimator.main?.active === 'mining') {
+    // If mining anim is active, apply timed hits
+    if (CharacterAnimator.main?.active === 'mining') {
       this._mineClock += dt;
-      // One “hit” every 2 seconds
-      if (this._mineClock >= 2.0) {
+      if (this._mineClock >= 2.0) { // one hit every ~2s
         this._mineClock = 0;
         this._applyMiningHit();
       }
@@ -120,39 +118,36 @@ export default class CopperOre {
   _applyMiningHit() {
     if (this.isDepleted) return;
 
-    // 🔨 damage the ore
+    // Damage this ore
     this.health -= 1;
 
-    // 🎁 reward a small random amount of copper (1–2)
+    // Reward: 1–2 copper per hit (temporary balance)
     const gained = 1 + Math.floor(Math.random() * 2);
-    this._grantCopper(gained);
+    this._giveCopper(gained);
 
     if (this.health <= 0) {
       this._deplete();
     } else {
-      // Restart loop to simulate repeated swings
+      // Restart loop cleanly each time an ore is collected
       CharacterAnimator.main?.playMining();
     }
   }
 
-  _grantCopper(count) {
-    // Placeholder hook; will integrate with actual inventory system later.
+  _giveCopper(count) {
+    // TODO: hook into a real inventory model later. For now, drop a counter in slot 1 if UI exists.
     console.log(`+${count} Copper Ore`);
-    // naive visual feedback in the first slot (if inventory UI exists)
-    const slot = document.querySelector('.inv-slot[data-slot="0"]');
+    const slot = document.querySelector('.inv-grid .inv-slot');
     if (slot) {
-      const cur = parseInt(slot.getAttribute('data-count') || '0', 10);
-      const next = cur + count;
-      slot.setAttribute('data-count', String(next));
-      slot.textContent = String(next);
+      const current = parseInt(slot.textContent || '0', 10) || 0;
+      slot.textContent = String(current + count);
     }
   }
 
   _deplete() {
     this.isDepleted = true;
-    this._mining = false;
     this.mesh.visible = false;
-    this._respawnTimer = this.respawnDelay;
+    this.respawnTimer = this.respawnDelay;
+    // Stop mining if we just depleted the node
     CharacterAnimator.main?.playIdle();
   }
 
@@ -160,6 +155,6 @@ export default class CopperOre {
     this.isDepleted = false;
     this.health = this.maxHealth;
     this.mesh.visible = true;
-    // do not auto-start mining; user needs to tap again
+    console.log('Copper ore respawned at same spot.');
   }
 }
