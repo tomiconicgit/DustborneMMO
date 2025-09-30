@@ -7,6 +7,7 @@ import { STATIC_OBJECTS } from './StaticObjectMap.js';
 import { TILE_SIZE } from './WorldMap.js';
 import Pathfinding from '../../engine/lib/Pathfinding.js';
 import CopperOre from '../objects/CopperOre.js';
+import GoldOre from '../objects/GoldOre.js';
 import Debugger from '../../debugger.js';
 
 export default class ChunkManager {
@@ -52,8 +53,11 @@ export default class ChunkManager {
 
       let url = null;
       switch (type) {
-        case 'copper-ore': // <-- keep type spelling consistent with StaticObjectMap
+        case 'copper-ore':
           url = new URL('../../assets/models/rocks/copper-ore.glb', import.meta.url).href;
+          break;
+        case 'gold-ore':
+          url = new URL('../../assets/models/rocks/gold-ore.glb', import.meta.url).href;
           break;
         default:
           Debugger.warn(`Unknown static object type: ${type}`);
@@ -110,7 +114,10 @@ export default class ChunkManager {
 
         if (type === 'copper-ore') {
           const ore = CopperOre.createFromMesh(inst, tx, tz);
-          inst.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = ore; });
+          inst.traverse(o => { o.userData = o.userData || {}; o.userData.ore = ore; });
+        } else if (type === 'gold-ore') {
+          const ore = GoldOre.createFromMesh(inst, tx, tz);
+          inst.traverse(o => { o.userData = o.userData || {}; o.userData.ore = ore; });
         }
       }
     }
