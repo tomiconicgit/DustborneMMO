@@ -8,7 +8,8 @@ import SoundManager from '../../engine/audio/SoundManager.js';
 import { TILE_SIZE } from '../world/WorldMap.js';
 
 export default class CopperOre {
-  static all = new Map(); // mesh.uuid -> instance
+  static all = new Map();             // mesh.uuid -> instance
+  static current = null;              // the ore actively being mined (exclusive)
 
   static createFromMesh(mesh, tileX, tileZ) {
     const ore = new CopperOre(mesh, tileX, tileZ);
@@ -21,7 +22,7 @@ export default class CopperOre {
     this.tileX = tileX;
     this.tileZ = tileZ;
 
-    // Simple balance for a wooden pickaxe (level 1 prospecting placeholder)
+    // Simple balance for wooden pickaxe
     this.maxHealth = 3;
     this.health = this.maxHealth;
 
@@ -35,17 +36,18 @@ export default class CopperOre {
     this._mineClock = 0;
     this._playedHitSfxInCycle = false;
 
-    // Make sure all child meshes can be recognized as this ore
+    // Mark all child meshes so ray hits can resolve back to this ore
     this.mesh.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = this; });
 
     // Per-frame updates
     this._unsub = UpdateBus.on((dt) => this.update(dt));
   }
 
+  /** Called by GroundPicker when the player taps this ore. */
   onTapped() {
     if (this.isDepleted) return;
 
-    // Player target: nearest adjacent tile (4-way). Pick the closest of the four.
+    // Choose nearest adjacent (4-way) standing tile
     const ch = Character.instance?.object3D;
     if (!ch) return;
 
@@ -56,23 +58,26 @@ export default class CopperOre {
       { x: this.tileX,     z: this.tileZ - 1 },
     ];
 
-    // Choose closest candidate in world space
     let best = null;
     let bestDist = Infinity;
     for (let i = 0; i < candidates.length; i++) {
       const c = candidates[i];
       const wp = new THREE.Vector3((c.x + 0.5) * TILE_SIZE, 0, (c.z + 0.5) * TILE_SIZE);
-      const d = wp.distanceToSquared(ch.position);
-      if (d < bestDist) { bestDist = d; best = { ...c, world: wp }; }
+      const d2 = wp.distanceToSquared(ch.position);
+      if (d2 < bestDist) { bestDist = d2; best = { ...c, world: wp }; }
     }
     const standPos = best?.world || new THREE.Vector3((this.tileX + 1.5) * TILE_SIZE, 0, (this.tileZ + 0.5) * TILE_SIZE);
 
-    // Walk there, then start mining
+    // Select THIS ore as the active target and walk to it
+    CopperOre.current = this;
     Movement.main?.walkTo(standPos, () => this._beginMining());
   }
 
   _beginMining() {
     if (this.isDepleted) return;
+
+    // Re-assert selection (in case we arrived late and another tap happened)
+    CopperOre.current = this;
 
     const ch = Character.instance?.object3D;
     const modelRoot = CharacterAnimator.main?.modelRoot;
@@ -84,40 +89,38 @@ export default class CopperOre {
       0,
       (this.tileZ + 0.5) * TILE_SIZE
     );
-    const dir = new THREE.Vector3().subVectors(orePos, ch.position);
-    dir.y = 0;
-    if (dir.lengthSq() > 1e-6) {
-      const yaw = Math.atan2(dir.x, dir.z);
+    const to = new THREE.Vector3().subVectors(orePos, ch.position); to.y = 0;
+    if (to.lengthSq() > 1e-6) {
+      const yaw = Math.atan2(to.x, to.z);
       modelRoot.rotation.set(0, yaw, 0);
     }
 
-    // Play mining animation loop (if available)
+    // Start the mining loop
     CharacterAnimator.main?.playMining?.();
-
-    // Reset cadence timer & sound flag
     this._mineClock = 0;
     this._playedHitSfxInCycle = false;
   }
 
   update(dt) {
-    // Handle respawn
+    // Handle respawn timing
     if (this.isDepleted) {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) this._respawn();
       return;
     }
 
-    // If mining anim is active, run the cycle timers
+    // Only the currently selected ore progresses the mining cycle
+    if (CopperOre.current !== this) return;
+
+    // Drive the cadence off the mining animation being active
     if (CharacterAnimator.main?.active === 'mining') {
       this._mineClock += dt;
 
-      // 1.8s into the loop -> play hit SFX once
       if (!this._playedHitSfxInCycle && this._mineClock >= 1.8) {
         this._playedHitSfxInCycle = true;
         SoundManager.main?.play('mining-hit', 0.9);
       }
 
-      // 2.0s -> apply hit and restart cycle
       if (this._mineClock >= 2.0) {
         this._mineClock = 0;
         this._playedHitSfxInCycle = false;
@@ -129,23 +132,22 @@ export default class CopperOre {
   _applyMiningHit() {
     if (this.isDepleted) return;
 
-    // Damage this ore
+    // Damage this exact ore
     this.health -= 1;
 
-    // Reward: 1–2 copper per hit (temporary balance)
+    // Reward (placeholder): +1–2 copper to slot 0 of UI
     const gained = 1 + Math.floor(Math.random() * 2);
     this._giveCopper(gained);
 
     if (this.health <= 0) {
       this._deplete();
     } else {
-      // Restart the visible animation loop for a fresh swing
+      // Restart the visible mining loop for a fresh swing
       CharacterAnimator.main?.restartMiningLoop?.();
     }
   }
 
   _giveCopper(count) {
-    // TODO: replace with real inventory logic later.
     const slot = document.querySelector('.inv-grid .inv-slot');
     if (slot) {
       const current = parseInt(slot.textContent || '0', 10) || 0;
@@ -158,18 +160,19 @@ export default class CopperOre {
     this.mesh.visible = false;
     this.respawnTimer = this.respawnDelay;
 
-    // SFX for depletion
     SoundManager.main?.play('rock-deplete', 1.0);
 
-    // Stop mining if we just depleted the node
-    CharacterAnimator.main?.playIdle?.();
+    // If this was the active ore, clear selection and stop mining
+    if (CopperOre.current === this) {
+      CopperOre.current = null;
+      CharacterAnimator.main?.playIdle?.();
+    }
   }
 
   _respawn() {
     this.isDepleted = false;
     this.health = this.maxHealth;
     this.mesh.visible = true;
-    // Reset cycle flags in case the player is still nearby
     this._mineClock = 0;
     this._playedHitSfxInCycle = false;
   }
