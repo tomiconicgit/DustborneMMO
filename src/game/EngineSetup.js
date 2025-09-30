@@ -33,6 +33,9 @@ export default class EngineSetup {
       // Dev & Audio
       { name: 'GridToggle',           path: paths.devGrid },
       { name: 'SoundManager',         path: paths.soundManager },
+
+      // UI
+      { name: 'InventoryUI',          path: paths.inventoryUI }, // ← NEW
     ];
   }
 }
