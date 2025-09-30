@@ -21,7 +21,11 @@ export default class CharacterAnimator {
     this.idleClip = null;
     this.idleAction = null;
 
-    this.active = null; // "walk" | "idle" | null
+    // mining
+    this.miningClip = null;
+    this.miningAction = null;
+
+    this.active = null; // "walk" | "idle" | "mining" | null
   }
 
   async _init() {
@@ -63,6 +67,20 @@ export default class CharacterAnimator {
       }
     }
 
+    // Load mining animation
+    {
+      const url = new URL('../../assets/models/character/anim-mining.glb', import.meta.url).href;
+      const gltf = await loader.loadAsync(url);
+      this.miningClip = gltf.animations?.[0] || null;
+      if (this.miningClip) {
+        this.miningAction = this.mixer.clipAction(this.miningClip);
+        this.miningAction.setLoop(THREE.LoopRepeat, Infinity);
+        this.miningAction.clampWhenFinished = false;
+        this.miningAction.enabled = true;
+        this.miningAction.weight = 1.0;
+      }
+    }
+
     // Start with idle by default
     this.playIdle();
   }
@@ -74,7 +92,6 @@ export default class CharacterAnimator {
   playWalk() {
     if (!this.walkAction) return;
     if (this.active === 'walk') return;
-
     this._fadeTo(this.walkAction, 0.15);
     this.active = 'walk';
   }
@@ -82,26 +99,27 @@ export default class CharacterAnimator {
   playIdle() {
     if (!this.idleAction) return;
     if (this.active === 'idle') return;
-
     this._fadeTo(this.idleAction, 0.2);
     this.active = 'idle';
   }
 
+  playMining() {
+    if (!this.miningAction) return;
+    if (this.active === 'mining') return;
+    this._fadeTo(this.miningAction, 0.15);
+    this.active = 'mining';
+  }
+
   stopAll() {
-    // fallback if you want everything off
-    if (this.walkAction) this.walkAction.stop();
-    if (this.idleAction) this.idleAction.stop();
+    [this.walkAction, this.idleAction, this.miningAction].forEach(a => a && a.stop());
     this.active = null;
   }
 
   _fadeTo(action, duration = 0.2) {
     if (!action) return;
-
-    // fade out all actions
-    [this.walkAction, this.idleAction].forEach((a) => {
+    [this.walkAction, this.idleAction, this.miningAction].forEach((a) => {
       if (a && a.isRunning()) a.fadeOut(duration);
     });
-
     action.reset().fadeIn(duration).play();
   }
 }
