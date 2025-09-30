@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import Scene from '../core/Scene.js';
 import SkySystem from './Sky.js';
+import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from '../../game/world/WorldMap.js';
 
 export default class Lighting {
   static hemi = null;
@@ -14,31 +15,38 @@ export default class Lighting {
       return;
     }
 
-    // Hemisphere fill + directional sun
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x555555, 0.9);
-    const sun  = new THREE.DirectionalLight(0xffffff, 2.0);
-
-    // ✅ Enable nice soft shadows
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    const RANGE = 40; // covers 30x30 world
-    sun.shadow.camera.left   = -RANGE;
-    sun.shadow.camera.right  =  RANGE;
-    sun.shadow.camera.top    =  RANGE;
-    sun.shadow.camera.bottom = -RANGE;
-    sun.shadow.camera.near   = 1;
-    sun.shadow.camera.far    = 120;
-    sun.shadow.bias = -0.0005;
-    sun.shadow.normalBias = 0.02;
-
+    // Hemisphere light for ambient skylight
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x6f6256, 0.95);
     scene.add(hemi);
+
+    // Directional sun
+    const sun  = new THREE.DirectionalLight(0xffffff, 1.85);
+    sun.castShadow = true;                // ✅ enable sun shadows
+    sun.shadow.mapSize.set(2048, 2048);   // quality
+
+    // Shadow camera sized to the playable area (orthographic for dir light)
+    const W = WORLD_WIDTH * TILE_SIZE;
+    const D = WORLD_DEPTH * TILE_SIZE;
+    const half = Math.max(W, D) * 0.6;    // generous bounds covering the board
+
+    const cam = sun.shadow.camera;
+    cam.left   = -half;
+    cam.right  =  half;
+    cam.top    =  half;
+    cam.bottom = -half;
+    cam.near   = 0.5;
+    cam.far    = 120;
+
+    // Reduce acne/ peter-panning
+    sun.shadow.bias = -0.0008;
+    sun.shadow.normalBias = 0.5;
+
     scene.add(sun);
-    scene.add(sun.target);
 
     Lighting.hemi = hemi;
     Lighting.sun  = sun;
 
-    // Sync with sky
+    // Initial sync from sky & keep in sync thereafter
     Lighting.syncToSky();
     window.addEventListener('sky:updated', Lighting.syncToSky);
   }
@@ -47,21 +55,29 @@ export default class Lighting {
     const sky = SkySystem.main;
     if (!sky || !Lighting.sun || !Lighting.hemi) return;
 
+    // Direction from procedural sky
     const dir = sky.getSunDirection();
-    Lighting.sun.position.copy(dir.clone().multiplyScalar(80));
-    Lighting.sun.target.position.set(15, 0, 15); // center of 30x30
+    // Place the sun far along that direction
+    Lighting.sun.position.copy(dir.clone().multiplyScalar(1000));
+    Lighting.sun.target.position.set(0, 0, 0);
     Lighting.sun.target.updateMatrixWorld?.();
 
-    // 🎨 Brighter midday palette
-    const sunColor = new THREE.Color(0xfff6e0);   // warm white
-    const skyBlue  = new THREE.Color(0x9cc7ff);   // fill blue
-    const ground   = new THREE.Color(0x7a6a55);   // earthy bounce
-
+    // Brighter midday style regardless of elevation; keep some variation
+    const elev = sky.params.elevation;
+    // Warmer when low, neutral when higher
+    const sunColor = sky.colorForElevation();
     Lighting.sun.color.copy(sunColor);
-    Lighting.sun.intensity = 2.0;
 
-    Lighting.hemi.color.copy(skyBlue);
-    Lighting.hemi.groundColor.copy(ground);
+    // Raise the floor and ceiling on intensity so it reads brighter
+    const t = Math.min(1, elev / 12);
+    const intensity = THREE.MathUtils.lerp(1.6, 2.2, t);
+    Lighting.sun.intensity = intensity;
+
+    // Hemisphere tint: blue-ish sky, warmer ground
+    const skyTint    = new THREE.Color(0x9fc8ff); // light sky blue
+    const groundTint = new THREE.Color(0x7f6f5d); // muted warm bounce
+    Lighting.hemi.color.copy(skyTint);
+    Lighting.hemi.groundColor.copy(groundTint);
     Lighting.hemi.intensity = 1.0;
   };
 }
