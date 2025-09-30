@@ -12,7 +12,6 @@ const paths = {
 
   // Engine infra / input
   updateBus:        mod('engine/core/UpdateBus.js'),
-  groundPicker:     mod('engine/input/GroundPicker.js'),
   cameraControls:   mod('engine/input/CameraTouchControls.js'),
   virtualJoystick:  mod('engine/input/VirtualJoystick.js'),
 
@@ -27,9 +26,6 @@ const paths = {
   character:        mod('game/character/Character.js'),
   characterAnimator:mod('game/character/CharacterAnimator.js'),
   movement:         mod('game/character/Movement.js'),
-
-  // Pathfinding
-  pathfinding:      mod('engine/lib/Pathfinding.js'),
 
   // Dev
   devGrid:          mod('game/dev/GridToggle.js'),
