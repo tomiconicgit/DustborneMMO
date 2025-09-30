@@ -11,11 +11,11 @@ export default class Camera {
   }
 
   constructor() {
-    this.worldHalfX = (WORLD_WIDTH * TILE_SIZE) / 2;
-    this.worldHalfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
+    this.worldMinX = 0;
+    this.worldMinZ = 0;
+    this.worldMaxX = WORLD_WIDTH * TILE_SIZE;   // 30
+    this.worldMaxZ = WORLD_DEPTH * TILE_SIZE;   // 30
 
-    // Make near a bit smaller and far larger for comfort; not related to the jump,
-    // but helps when users really zoom.
     this.threeCamera = new THREE.PerspectiveCamera(
       60,
       window.innerWidth / window.innerHeight,
@@ -23,24 +23,21 @@ export default class Camera {
       Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE * 50
     );
 
-    // Free orbit camera (no auto-follow)
     this.target        = { position: new THREE.Vector3(0, 0, 0) };
     this.orbitAngle    = Math.PI / 3;
     this.orbitDistance = 6;
 
     this.minDistance = 3;
-    this.maxDistance = 18; // give a bit more range; adjust to taste
+    this.maxDistance = 18;
     this.minHeight   = 3;
     this.maxHeight   = 8;
 
     window.addEventListener('resize', this.handleResize, { passive: true });
     this.handleResize();
-
     this.update();
   }
 
-  notifyUserRotated() {} // kept for compatibility
-
+  notifyUserRotated() {}
   setTarget(target) { this.target = target; this.update(); }
 
   _heightFromDistance() {
@@ -52,22 +49,18 @@ export default class Camera {
   update() {
     const tp = this.target?.position || new THREE.Vector3();
 
-    // Optionally clamp ONLY the look-at target so we don't stare off-map.
-    const lookX = THREE.MathUtils.clamp(tp.x, -this.worldHalfX, this.worldHalfX);
-    const lookZ = THREE.MathUtils.clamp(tp.z, -this.worldHalfZ, this.worldHalfZ);
+    // Clamp ONLY the look-at (keeps camera stable and avoids “fighting”)
+    const lookX = THREE.MathUtils.clamp(tp.x, this.worldMinX, this.worldMaxX);
+    const lookZ = THREE.MathUtils.clamp(tp.z, this.worldMinZ, this.worldMaxZ);
 
     this.orbitDistance = THREE.MathUtils.clamp(this.orbitDistance, this.minDistance, this.maxDistance);
     const h = this._heightFromDistance();
 
-    // Compute orbit position around the (possibly clamped) look-at point.
     const camPos = new THREE.Vector3(
       lookX + this.orbitDistance * Math.sin(this.orbitAngle),
       tp.y + h,
       lookZ + this.orbitDistance * Math.cos(this.orbitAngle)
     );
-
-    // 🔑 DO NOT CLAMP camera position — clamping here causes “fighting/jumping”
-    // when the orbit path would like to be outside the terrain box.
 
     this.threeCamera.position.copy(camPos);
     this.threeCamera.lookAt(lookX, tp.y + 1, lookZ);
