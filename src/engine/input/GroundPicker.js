@@ -33,6 +33,16 @@ export default class GroundPicker {
     }
   }
 
+  _findOreOnHitObject(obj) {
+    // Walk up to a parent that carries userData.ore
+    let p = obj;
+    while (p) {
+      if (p.userData?.ore) return p.userData.ore;
+      p = p.parent;
+    }
+    return null;
+  }
+
   /**
    * Returns:
    *  - If an ore is tapped: triggers ore.onTapped() internally and returns null (so no ground:tap is dispatched).
@@ -59,11 +69,12 @@ export default class GroundPicker {
     if (this.staticGroup) {
       const oreHits = this.ray.intersectObject(this.staticGroup, true);
       if (oreHits && oreHits.length) {
-        // find first hit that has ore logic attached
-        const hit = oreHits.find(h => h.object?.userData?.ore);
-        if (hit && hit.object.userData.ore?.onTapped) {
-          hit.object.userData.ore.onTapped();
-          return null; // stop here; don't move by ground tap
+        for (let i = 0; i < oreHits.length; i++) {
+          const ore = this._findOreOnHitObject(oreHits[i].object);
+          if (ore?.onTapped) {
+            ore.onTapped();
+            return null; // stop here; don't move by ground tap
+          }
         }
       }
     }
