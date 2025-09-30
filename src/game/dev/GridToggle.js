@@ -19,14 +19,18 @@ export default class GridToggle {
     this.group.visible = false;
     this.scene.add(this.group);
 
-    // GridHelper is already on the XZ plane; no rotation needed.
-    const size   = Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE;
-    const divs   = WORLD_WIDTH; // lines per tile
+    // Grid sized to terrain and positioned exactly where the terrain is.
+    const width  = WORLD_WIDTH * TILE_SIZE;   // 30
+    const depth  = WORLD_DEPTH * TILE_SIZE;   // 30
+    const size   = Math.max(width, depth);
+    const divs   = WORLD_WIDTH;               // 30 lines-per-side so each tile shows
+
     const grid   = new THREE.GridHelper(size, divs, 0x444444, 0x444444);
-    grid.position.y = 0.02; // avoid z-fighting
+    grid.rotation.x = 0;              // GridHelper already lies on XZ
+    grid.position.set(width / 2, 0.02, depth / 2); // ✅ align with ProceduralGround
     this.group.add(grid);
 
-    // Safe-area aware toggle button (won’t hide under the notch)
+    // Safe-area aware toggle button
     const button = document.createElement('button');
     button.textContent = 'Grid';
     Object.assign(button.style, {
@@ -51,9 +55,6 @@ export default class GridToggle {
     document.body.appendChild(button);
   }
 
-  update(playerPosition) {
-    if (!this.group.visible || !playerPosition) return;
-    this.group.position.x = Math.round(playerPosition.x);
-    this.group.position.z = Math.round(playerPosition.z);
-  }
+  // No need to chase the player anymore; grid is world-aligned.
+  update(_playerPosition) {}
 }
