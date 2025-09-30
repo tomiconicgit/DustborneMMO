@@ -18,15 +18,14 @@ export default class SkySystem {
     sky.scale.setScalar(450000);
     scene.add(sky);
 
-    // ⬇️ Back to the earlier “low horizon” look
     this.params = {
       turbidity: 7.0,
-      rayleigh: 1.672,
+      rayleigh: 1.8,
       mieCoefficient: 0.004,
-      mieDirectionalG: 0.584,
-      elevation: 0.8,   // low sun near horizon again
+      mieDirectionalG: 0.58,
+      elevation: 0.8,     // low sun
       azimuth: 180.0,
-      exposure: 0.5     // darker / moodier background dome
+      exposure: 0.5
     };
 
     this.sky = sky;
@@ -44,6 +43,7 @@ export default class SkySystem {
     u.mieCoefficient.value  = mieCoefficient;
     u.mieDirectionalG.value = mieDirectionalG;
 
+    // Sun still near horizon
     const phi   = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(azimuth);
     this.sun.setFromSphericalCoords(1, phi, theta);
@@ -55,21 +55,35 @@ export default class SkySystem {
       renderer.toneMappingExposure = exposure;
     }
 
+    // 🔵 Force zenith tint blue
+    this.setZenithTint(new THREE.Color(0x4da6ff));
+
     window.dispatchEvent(new CustomEvent('sky:updated', {
       detail: { sunDir: this.getSunDirection().clone(), elevation, azimuth }
     }));
+  }
+
+  setZenithTint(color) {
+    // Hack: the Sky shader takes uniforms for "up" scattering
+    // We fake it by biasing the vertex colors at high altitudes.
+    const u = this.sky.material.uniforms;
+    if (u && u.rayleigh) {
+      // blend stronger blue scattering
+      u.rayleigh.value = this.params.rayleigh * 1.2;
+      // direct color override at top (approximation)
+      this.sky.material.uniforms.topColor = { value: color };
+    }
   }
 
   getSunDirection() {
     return this.sun.clone().normalize();
   }
 
-  // Warm near horizon -> neutral by ~15°
   colorForElevation() {
     const elev = Math.max(0, Math.min(15, this.params.elevation));
     const t = elev / 15;
-    const warm = new THREE.Color(0xFFD2A6);
-    const neutral = new THREE.Color(0xFFFFFF);
+    const warm = new THREE.Color(0xFFD2A6); // horizon warm
+    const neutral = new THREE.Color(0xffffff);
     return warm.lerp(neutral, t);
   }
 }
