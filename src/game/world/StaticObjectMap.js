@@ -1,17 +1,16 @@
 // file: src/game/world/StaticObjectMap.js
 
-// Hand-placed objects by tile, keyed "x,z" where x/z are tile indices.
-// Each entry is an array of objects with at least a `type` field.
+// Hand-placed objects by tile, keyed "x,z" (tile indices).
 // Supported types: 'copper-ore'
-//
-// Objects are spawned at the *center* of the tile. Y is taken from the GLB.
+// Each object is placed at the tile center; the GLB's baked Y is preserved.
 
 export const STATIC_OBJECTS = {
-  // Copper ore cluster around tiles (13..15, 15..17)
-  '13,16': [ { type: 'copper-ore', yaw: 0.10 } ],
-  '14,16': [ { type: 'copper-ore', yaw: 0.80 } ],
-  '15,16': [ { type: 'copper-ore', yaw: 1.55 } ],
-  '14,17': [ { type: 'copper-ore', yaw: 2.20 } ],
-  '15,17': [ { type: 'copper-ore', yaw: 2.85 } ],
-  '14,15': [ { type: 'copper-ore', yaw: -0.55 } ],
+  // 6 copper rocks, arranged with a 1-tile moat around each one.
+  // (Chebyshev distance between any pair >= 2)
+  '12,12': [ { type: 'copper-ore', yaw: -0.35 } ],
+  '14,12': [ { type: 'copper-ore', yaw:  0.55 } ],
+  '16,12': [ { type: 'copper-ore', yaw:  1.20 } ],
+  '12,14': [ { type: 'copper-ore', yaw:  2.10 } ],
+  '14,16': [ { type: 'copper-ore', yaw: -1.10 } ],
+  '16,16': [ { type: 'copper-ore', yaw:  2.75 } ],
 };
