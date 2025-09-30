@@ -114,6 +114,23 @@ export default class CharacterAnimator {
     this.active = 'mining';
   }
 
+  /**
+   * Force the mining animation to restart from time 0,
+   * while keeping 'mining' active (used after every ore hit).
+   */
+  restartMiningLoop() {
+    if (!this.miningAction) return;
+    if (this.active !== 'mining') {
+      // If we somehow aren't in mining, switch to it.
+      this._fadeTo(this.miningAction, 0.1);
+      this.active = 'mining';
+      return;
+    }
+    // Already mining: rewind cleanly without re-fading.
+    this.miningAction.reset(); // sets time=0 and enables
+    this.miningAction.play();
+  }
+
   stopAll() {
     [this.walkAction, this.idleAction, this.miningAction].forEach(a => a && a.stop());
     this.active = null;
