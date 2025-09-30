@@ -35,7 +35,10 @@ const paths = {
   devGrid:          mod('game/dev/GridToggle.js'),
 
   // UI
-  inventoryUI:      mod('ui/inventory.js'),   // ← NEW
+  inventoryUI:      mod('ui/inventory.js'),
+
+  // NEW: Procedural 2D inventory icons
+  itemIcons:        mod('ui/ItemIcons.js'),
 };
 
 export default paths;
