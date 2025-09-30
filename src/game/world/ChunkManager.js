@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Scene from '../../engine/core/Scene.js';
 import TerrainGenerator from './TerrainGenerator.js';
-import { STATIC_OBJECTS } from './StaticObjectMap.js';
+import { STATIC_OBJECTS, NON_WALKABLE_TILES } from './StaticObjectMap.js';
 import { TILE_SIZE } from './WorldMap.js';
 import Pathfinding from '../../engine/lib/Pathfinding.js';
 import CopperOre from '../objects/CopperOre.js';
@@ -27,17 +27,32 @@ export default class ChunkManager {
       return;
     }
 
-    Debugger.log('Building world...');
-    const ground = TerrainGenerator.create();
-    scene.add(ground);
+    (async () => {
+      try {
+        Debugger.log('Building world...');
 
-    Pathfinding.create?.();
+        // 1) Procedural desert floor first (receives shadows + used by GroundPicker)
+        const ground = TerrainGenerator.create();
+        scene.add(ground);
 
-    this._spawnStaticObjects().catch(err => {
-      Debugger.error('Failed to spawn static objects', err);
-    });
+        // 2) Ensure shared pathfinding grid exists
+        Pathfinding.create?.();
 
-    Debugger.log('World build complete.');
+        // 3) Load authored mining-area and fit it to the 30x30 footprint
+        try {
+          await TerrainGenerator.loadMiningArea(scene);
+        } catch (err) {
+          Debugger.warn('Mining area failed to load; continuing with procedural floor only.', err);
+        }
+
+        // 4) Spawn static objects (copper ore, etc.)
+        await this._spawnStaticObjects();
+
+        Debugger.log('World build complete.');
+      } catch (e) {
+        Debugger.error('Failed to build world.', e);
+      }
+    })();
   }
 
   async _spawnStaticObjects() {
@@ -49,12 +64,13 @@ export default class ChunkManager {
 
     const getPrototype = async (type) => {
       if (protoCache.has(type)) return protoCache.get(type);
-
       let url = null;
+
       switch (type) {
-        case 'copper-ore': // <-- keep type spelling consistent with StaticObjectMap
+        case 'copper-ore':
           url = new URL('../../assets/models/rocks/copper-ore.glb', import.meta.url).href;
           break;
+        // Add other static types here (e.g., 'gold-ore') when needed.
         default:
           Debugger.warn(`Unknown static object type: ${type}`);
           return null;
@@ -64,18 +80,40 @@ export default class ChunkManager {
       const root = gltf.scene || gltf.scenes?.[0];
       if (!root) return null;
 
-      root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      root.traverse((o) => {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+          if (o.material) {
+            if (Array.isArray(o.material)) o.material.forEach((m) => m && (m.side = THREE.FrontSide));
+            else o.material.side = THREE.FrontSide;
+          }
+        }
+      });
 
       protoCache.set(type, root);
       return root;
     };
 
+    // Group that holds all static world objects and is also used by GroundPicker for ore picking
     const rootGroup = new THREE.Group();
     rootGroup.name = 'StaticObjects';
     scene.add(rootGroup);
 
     const pf = Pathfinding.main || null;
 
+    // Apply NON_WALKABLE_TILES (obstacles from your dev marker tool)
+    if (pf?.grid && Array.isArray(NON_WALKABLE_TILES)) {
+      for (let i = 0; i < NON_WALKABLE_TILES.length; i++) {
+        const pair = NON_WALKABLE_TILES[i];
+        const x = Number(pair[0]), z = Number(pair[1]);
+        if (Number.isFinite(x) && Number.isFinite(z)) {
+          pf.grid.setWalkable(x, z, false);
+        }
+      }
+    }
+
+    // Place STATIC_OBJECTS (copper etc.)
     for (const key in STATIC_OBJECTS) {
       if (!Object.prototype.hasOwnProperty.call(STATIC_OBJECTS, key)) continue;
 
@@ -98,6 +136,7 @@ export default class ChunkManager {
         const inst = proto.clone(true);
         inst.name = `${type}-${tx}-${tz}-${i}`;
 
+        // Tile center placement; preserve GLB’s baked local Y
         const worldX = (tx + 0.5) * TILE_SIZE;
         const worldZ = (tz + 0.5) * TILE_SIZE;
         inst.position.set(worldX, inst.position.y, worldZ);
@@ -106,10 +145,13 @@ export default class ChunkManager {
 
         rootGroup.add(inst);
 
+        // Block the tile in the pathfinding grid
         if (pf?.grid) pf.grid.setWalkable(tx, tz, false);
 
+        // Attach mining behavior
         if (type === 'copper-ore') {
           const ore = CopperOre.createFromMesh(inst, tx, tz);
+          // mark all children so GroundPicker can resolve ore from any hit mesh
           inst.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = ore; });
         }
       }
