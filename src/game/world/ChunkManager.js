@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Scene from '../../engine/core/Scene.js';
 import TerrainGenerator from './TerrainGenerator.js';
-import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from './WorldMap.js';
 import { STATIC_OBJECTS } from './StaticObjectMap.js';
+import { TILE_SIZE } from './WorldMap.js';
+import Pathfinding from '../../engine/lib/Pathfinding.js';
 import Debugger from '../../debugger.js';
 
 export default class ChunkManager {
@@ -17,41 +18,45 @@ export default class ChunkManager {
   }
 
   constructor() {
-    if (ChunkManager.instance) throw new Error("ChunkManager is a singleton.");
+    if (ChunkManager.instance) {
+      throw new Error('ChunkManager is a singleton.');
+    }
 
     const scene = Scene.main;
     if (!scene) {
-      Debugger.error("ChunkManager created before Scene was initialized.");
+      Debugger.error('ChunkManager created before Scene was initialized.');
       return;
     }
 
-    Debugger.log("Building world...");
+    Debugger.log('Building world...');
     const ground = TerrainGenerator.create();
     scene.add(ground);
-    Debugger.log("World build complete.");
 
-    // Spawn static objects (async)
-    this._spawnStaticObjects().catch((e) => {
-      Debugger.warn('Failed to spawn static objects:', e);
+    // Ensure we have a shared pathfinding grid early
+    Pathfinding.create?.();
+
+    // Spawn statics (ores etc.) asynchronously
+    this._spawnStaticObjects().catch(err => {
+      Debugger.error('Failed to spawn static objects', err);
     });
+
+    Debugger.log('World build complete.');
   }
 
   async _spawnStaticObjects() {
     const scene = Scene.main;
     if (!scene) return;
 
-    // Preload assets we might need
+    // Shared loader and prototype cache per "type"
     const loader = new GLTFLoader();
-
-    // Cache of prototypes by type
-    const prototypes = {};
+    const protoCache = new Map();
 
     const getPrototype = async (type) => {
-      if (prototypes[type]) return prototypes[type];
+      if (protoCache.has(type)) return protoCache.get(type);
 
       let url = null;
       switch (type) {
-        case 'ore-copper':
+        case 'copper-ore':
           url = new URL('../../assets/models/rocks/copper-ore.glb', import.meta.url).href;
           break;
         default:
@@ -60,39 +65,35 @@ export default class ChunkManager {
       }
 
       const gltf = await loader.loadAsync(url);
-      const proto = gltf.scene || gltf.scenes?.[0];
-      if (!proto) {
-        Debugger.warn(`[Static] No scene in GLB for type ${type}`);
-        return null;
-      }
+      const root = gltf.scene || gltf.scenes?.[0];
+      if (!root) return null;
 
-      proto.traverse((o) => {
+      // Make meshes cast/receive shadows; keep Y as baked-in (important)
+      root.traverse(o => {
         if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
       });
 
-      prototypes[type] = proto;
-      return proto;
+      protoCache.set(type, root);
+      return root;
     };
 
-    // Group for all statics (easy to find/debug)
-    const root = new THREE.Group();
-    root.name = 'StaticObjects';
-    scene.add(root);
+    const rootGroup = new THREE.Group();
+    rootGroup.name = 'StaticObjects';
+    scene.add(rootGroup);
 
-    // Iterate the tile map
+    const pf = Pathfinding.main || null;
+
+    // Iterate over the StaticObjectMap tiles
     for (const key in STATIC_OBJECTS) {
       if (!Object.prototype.hasOwnProperty.call(STATIC_OBJECTS, key)) continue;
 
       const [txStr, tzStr] = key.split(',');
-      let tx = Number(txStr), tz = Number(tzStr);
+      const tx = Number(txStr);
+      const tz = Number(tzStr);
       if (!Number.isFinite(tx) || !Number.isFinite(tz)) continue;
 
-      // clamp inside world
-      tx = THREE.MathUtils.clamp(tx, 0, WORLD_WIDTH - 1);
-      tz = THREE.MathUtils.clamp(tz, 0, WORLD_DEPTH - 1);
-
       const list = STATIC_OBJECTS[key];
-      if (!Array.isArray(list)) continue;
+      if (!Array.isArray(list) || list.length === 0) continue;
 
       for (let i = 0; i < list.length; i++) {
         const spec = list[i] || {};
@@ -105,19 +106,25 @@ export default class ChunkManager {
         const inst = proto.clone(true);
         inst.name = `${type}-${tx}-${tz}-${i}`;
 
-        // Snap to tile center in XZ; keep authored Y (baked in the GLB)
+        // Place at the tile center; keep the model's baked Y (inst.position.y)
         const worldX = (tx + 0.5) * TILE_SIZE;
         const worldZ = (tz + 0.5) * TILE_SIZE;
         inst.position.set(worldX, inst.position.y, worldZ);
 
-        // Optional rotation (yaw in radians); small variety per spec
-        const yaw = typeof spec.yaw === 'number' ? spec.yaw : 0;
-        inst.rotation.y += yaw;
+        // Optional yaw per instance (radians). Default 0.
+        if (typeof spec.yaw === 'number') {
+          inst.rotation.y += spec.yaw;
+        }
 
-        root.add(inst);
+        rootGroup.add(inst);
+
+        // Mark the tile as non-walkable in the shared pathfinding grid
+        if (pf?.grid) {
+          pf.grid.setWalkable(tx, tz, false);
+        }
       }
     }
 
-    Debugger.log('Static objects spawned:', root);
+    Debugger.log('Static objects spawned:', rootGroup);
   }
 }
