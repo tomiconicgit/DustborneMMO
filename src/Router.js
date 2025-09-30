@@ -11,9 +11,8 @@ const paths = {
   camera:           mod('engine/rendering/Camera.js'),
   lighting:         mod('engine/rendering/Lighting.js'),
   sky:              mod('engine/rendering/Sky.js'),
-  occlusionFader:   mod('engine/rendering/OcclusionFader.js'),   // ← NEW
 
-  // Input
+  // Input (tap-to-move + orbit/pinch)
   groundPicker:     mod('engine/input/GroundPicker.js'),
   cameraControls:   mod('engine/input/CameraTouchControls.js'),
 
@@ -27,13 +26,14 @@ const paths = {
   character:        mod('game/character/Character.js'),
   characterAnimator:mod('game/character/CharacterAnimator.js'),
 
-  // Movement & pathfinding
+  // Movement (tap-to-move) & pathfinding
   movement:         mod('game/character/Movement.js'),
   pathfinding:      mod('engine/lib/Pathfinding.js'),
 
   // Audio & Dev
   soundManager:     mod('engine/audio/SoundManager.js'),
   devGrid:          mod('game/dev/GridToggle.js'),
+  devMarker:        mod('game/dev/TileMarker.js'),   // ← NEW
 
   // UI
   inventoryUI:      mod('ui/inventory.js'),
