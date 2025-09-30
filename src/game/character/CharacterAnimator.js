@@ -13,49 +13,46 @@ export default class CharacterAnimator {
 
   constructor() {
     this.mixer = null;
+    this.modelRoot = null;
     this.walkClip = null;
     this.walkAction = null;
-    this.active = null; // 'walk' | null
+    this.active = null;
   }
 
   async _init() {
-    // Grab the loaded character model root
     const root = Character.instance?.object3D;
     if (!root) throw new Error('CharacterAnimator requires Character.instance');
 
-    // The skinned model is the first child under the Character group.
-    const modelRoot = root.children[0];
-    if (!modelRoot) throw new Error('Character model not found for animator.');
+    // The model root (skinned mesh group) is the first child under Character.object3D
+    this.modelRoot = root.children[0];
+    if (!this.modelRoot) throw new Error('Character model not found for animator.');
 
-    // Mixer on the model
-    this.mixer = new THREE.AnimationMixer(modelRoot);
+    // Create the mixer for the model
+    this.mixer = new THREE.AnimationMixer(this.modelRoot);
 
-    // Expose to other systems (Movement already reads these)
-    Character.instance.mixer = this.mixer;
-    Character.instance.root  = modelRoot;
-
-    // Load walk animation
+    // Load walking animation GLB
     const url = new URL('../../assets/models/character/anim-walking.glb', import.meta.url).href;
     const gltf = await new GLTFLoader().loadAsync(url);
     this.walkClip = gltf.animations?.[0] || null;
 
     if (this.walkClip) {
       this.walkAction = this.mixer.clipAction(this.walkClip);
-      this.walkAction.setLoop(THREE.LoopRepeat, Infinity);   // <-- LOOP
+      this.walkAction.setLoop(THREE.LoopRepeat, Infinity);
       this.walkAction.clampWhenFinished = false;
       this.walkAction.enabled = true;
       this.walkAction.weight = 1.0;
-      this.walkAction.timeScale = 1.0;                       // tweak for speed feel
+      this.walkAction.timeScale = 1.0;
     }
+  }
+
+  update(dt) {
+    if (this.mixer) this.mixer.update(dt);
   }
 
   playWalk() {
     if (!this.walkAction) return;
-    if (this.active === 'walk' && this.walkAction.isRunning() && !this.walkAction.paused) {
-      // already looping
-      return;
-    }
-    // (Re)start loop cleanly
+    if (this.active === 'walk') return;
+
     this.walkAction.reset();
     this.walkAction.paused = false;
     this.walkAction.play();
@@ -64,9 +61,7 @@ export default class CharacterAnimator {
 
   stopAll() {
     if (this.walkAction) {
-      // quick blend out
       this.walkAction.fadeOut(0.15);
-      // ensure fully stopped after fade
       setTimeout(() => {
         this.walkAction.stop();
         this.walkAction.reset();
