@@ -20,12 +20,12 @@ export default class SkySystem {
 
     this.params = {
       turbidity: 7.0,
-      rayleigh: 1.8,
+      rayleigh: 1.672,
       mieCoefficient: 0.004,
-      mieDirectionalG: 0.58,
-      elevation: 0.8,     // low sun
+      mieDirectionalG: 0.584,
+      elevation: 0.8,
       azimuth: 180.0,
-      exposure: 0.5
+      exposure: 0.55
     };
 
     this.sky = sky;
@@ -43,7 +43,6 @@ export default class SkySystem {
     u.mieCoefficient.value  = mieCoefficient;
     u.mieDirectionalG.value = mieDirectionalG;
 
-    // Sun still near horizon
     const phi   = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(azimuth);
     this.sun.setFromSphericalCoords(1, phi, theta);
@@ -55,35 +54,30 @@ export default class SkySystem {
       renderer.toneMappingExposure = exposure;
     }
 
-    // 🔵 Force zenith tint blue
-    this.setZenithTint(new THREE.Color(0x4da6ff));
+    // ✅ Blue top gradient overlay
+    const TOP  = new THREE.Color(0x73b7ff); // blue zenith
+    const BOT  = new THREE.Color(0xffd1a3); // warm horizon
+    this.sky.material.onBeforeCompile = (shader) => {
+      shader.uniforms.topColor    = { value: TOP };
+      shader.uniforms.bottomColor = { value: BOT };
+      shader.uniforms.mixStrength = { value: 0.75 };
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+        `
+          float h = clamp(normalize(vWorldPosition).y, 0.0, 1.0);
+          vec3 grad = mix(bottomColor, topColor, smoothstep(0.0, 1.0, h));
+          vec3 blended = mix(outgoingLight, grad, mixStrength);
+          gl_FragColor = vec4(blended, diffuseColor.a);
+        `
+      );
+    };
+    this.sky.material.needsUpdate = true;
 
     window.dispatchEvent(new CustomEvent('sky:updated', {
       detail: { sunDir: this.getSunDirection().clone(), elevation, azimuth }
     }));
   }
 
-  setZenithTint(color) {
-    // Hack: the Sky shader takes uniforms for "up" scattering
-    // We fake it by biasing the vertex colors at high altitudes.
-    const u = this.sky.material.uniforms;
-    if (u && u.rayleigh) {
-      // blend stronger blue scattering
-      u.rayleigh.value = this.params.rayleigh * 1.2;
-      // direct color override at top (approximation)
-      this.sky.material.uniforms.topColor = { value: color };
-    }
-  }
-
-  getSunDirection() {
-    return this.sun.clone().normalize();
-  }
-
-  colorForElevation() {
-    const elev = Math.max(0, Math.min(15, this.params.elevation));
-    const t = elev / 15;
-    const warm = new THREE.Color(0xFFD2A6); // horizon warm
-    const neutral = new THREE.Color(0xffffff);
-    return warm.lerp(neutral, t);
-  }
+  getSunDirection() { return this.sun.clone().normalize(); }
 }
