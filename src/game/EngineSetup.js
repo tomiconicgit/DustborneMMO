@@ -11,7 +11,7 @@ export default class EngineSetup {
       { name: 'Lighting',             path: paths.lighting },
       { name: 'Sky',                  path: paths.sky },
 
-      // Core update + input
+      // Core update + input (tap-to-move + orbit/pinch)
       { name: 'UpdateBus',            path: paths.updateBus },
       { name: 'GroundPicker',         path: paths.groundPicker },
       { name: 'CameraTouchControls',  path: paths.cameraControls },
@@ -26,15 +26,13 @@ export default class EngineSetup {
       { name: 'Character',            path: paths.character },
       { name: 'CharacterAnimator',    path: paths.characterAnimator },
 
-      // Navigation + movement
+      // Navigation + movement (tap-to-move)
       { name: 'Pathfinding',          path: paths.pathfinding },
       { name: 'Movement',             path: paths.movement },
 
-      // Rendering helpers
-      { name: 'OcclusionFader',       path: paths.occlusionFader },   // ← NEW
-
       // Dev & Audio
       { name: 'GridToggle',           path: paths.devGrid },
+      { name: 'TileMarker',           path: paths.devMarker },  // ← NEW dev tool
       { name: 'SoundManager',         path: paths.soundManager },
 
       // UI
