@@ -13,7 +13,6 @@ export default class EngineSetup {
 
       // Input/core utils
       { name: 'UpdateBus',            path: paths.updateBus },
-      { name: 'GroundPicker',         path: paths.groundPicker },
       { name: 'CameraTouchControls',  path: paths.cameraControls },
       { name: 'VirtualJoystick',      path: paths.virtualJoystick },
 
@@ -27,8 +26,7 @@ export default class EngineSetup {
       { name: 'Character',            path: paths.character },
       { name: 'CharacterAnimator',    path: paths.characterAnimator },
 
-      // Navigation + movement
-      { name: 'Pathfinding',          path: paths.pathfinding },
+      // Movement (joystick-only build)
       { name: 'Movement',             path: paths.movement },
 
       // Dev tools / audio
