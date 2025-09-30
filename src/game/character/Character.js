@@ -3,60 +3,98 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Scene from '../../engine/core/Scene.js';
 import Camera from '../../engine/rendering/Camera.js';
-import { TILE_SIZE } from '../world/WorldMap.js';
-import Debugger from '../../debugger.js';
+import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from '../world/WorldMap.js';
 
 export default class Character {
   static instance = null;
 
   static async create() {
-    if (Character.instance) return Character.instance;
+    if (Character.instance) return;
     Character.instance = new Character();
-    await Character.instance._init();
-    return Character.instance;
+    await Character.instance._load();
   }
 
   constructor() {
-    this.group = new THREE.Group();
-    this.group.name = 'PlayerCharacter';
-    Scene.main.add(this.group);
+    this.object3D = new THREE.Group();
+    this.object3D.name = 'PlayerCharacter';
 
+    // === FIXED SPAWN TILE ===
+    // Tile [2,12] → world center:
+    const spawnTileX = 2;
+    const spawnTileZ = 12;
+    const worldX = (spawnTileX + 0.5) * TILE_SIZE;
+    const worldZ = (spawnTileZ + 0.5) * TILE_SIZE;
+    this.object3D.position.set(worldX, 0, worldZ);
+
+    this.modelRoot = null;
     this.mixer = null;
-    this.model = null;
+    this.pickaxe = null;
   }
 
-  async _init() {
+  setMixer(mixer) { this.mixer = mixer; }
+  get root() { return this.modelRoot || this.object3D; }
+
+  async _load() {
+    const scene = Scene.main;
+    if (!scene) throw new Error('Scene must be created before Character.');
+
+    const modelURL = new URL('../../assets/models/character/character.glb', import.meta.url).href;
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync(modelURL);
+
+    const model = gltf.scene || gltf.scenes?.[0];
+    if (!model) throw new Error('GLB has no scene.');
+    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    model.position.set(0, 0.01, 0);
+
+    this.modelRoot = model;
+    this.object3D.add(model);
+    scene.add(this.object3D);
+
+    this.halfX = (WORLD_WIDTH * TILE_SIZE) / 2;
+    this.halfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
+
+    await this._attachPickaxe();
+
+    Camera.main?.setTarget?.(this.object3D);
+  }
+
+  async _attachPickaxe() {
     try {
-      const loader = new GLTFLoader();
-      const url = new URL('../../assets/models/character/character.glb', import.meta.url).href;
-      const gltf = await loader.loadAsync(url);
+      const toolURL = new URL('../../assets/models/tools/wooden-pickaxe.glb', import.meta.url).href;
+      const gltf = await new GLTFLoader().loadAsync(toolURL);
+      const pickaxe = gltf.scene;
+      pickaxe.name = 'WoodenPickaxe';
 
-      this.model = gltf.scene;
-      this.model.traverse(obj => {
-        if (obj.isMesh) {
-          obj.castShadow = true;
-          obj.receiveShadow = true;
-        }
-      });
+      const searchRoot = this.modelRoot || this.object3D;
+      const rightHand = searchRoot.getObjectByName('RightHand');
+      if (!rightHand) {
+        console.warn('[Character] RightHand bone not found — cannot attach pickaxe.');
+        return;
+      }
 
-      this.group.add(this.model);
+      pickaxe.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
-      // === FIXED SPAWN POINT ===
-      const spawnTile = [2, 12]; // x,z tile coordinates
-      const worldX = (spawnTile[0] + 0.5) * TILE_SIZE;
-      const worldZ = (spawnTile[1] + 0.5) * TILE_SIZE;
-      this.group.position.set(worldX, 0, worldZ);
+      // Attachment transform
+      pickaxe.position.set(0.2, 0.2, 0.0);
+      pickaxe.scale.set(0.1353, 0.1353, 0.1353);
+      pickaxe.rotation.order = 'YXZ';
+      pickaxe.rotation.set(
+        THREE.MathUtils.degToRad(-60),
+        THREE.MathUtils.degToRad(40),
+        THREE.MathUtils.degToRad(-90)
+      );
 
-      // === Camera follows player ===
-      Camera.main?.setTarget(this.group);
+      rightHand.add(pickaxe);
+      pickaxe.matrixAutoUpdate = true;
 
-      Debugger.log(`Character spawned at tile [${spawnTile[0]}, ${spawnTile[1]}] → world (${worldX},${worldZ})`);
+      this.pickaxe = pickaxe;
+
+      // Ensure first-frame transform is correct
+      rightHand.updateWorldMatrix(true, true);
+      pickaxe.updateMatrixWorld(true);
     } catch (err) {
-      Debugger.error('Failed to load character model', err);
+      console.warn('[Character] Failed to load/attach pickaxe:', err);
     }
-  }
-
-  update(delta) {
-    if (this.mixer) this.mixer.update(delta);
   }
 }
