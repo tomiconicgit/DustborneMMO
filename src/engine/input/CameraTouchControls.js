@@ -1,6 +1,6 @@
 // file: src/engine/input/CameraTouchControls.js
 // One-finger drag = orbit rotate, two-finger pinch = zoom,
-// light tap = pick ground & dispatch 'ground:tap'.
+// light tap = pick ground & dispatch 'ground:tap' (only if NO pinch occurred).
 import Camera from '../rendering/Camera.js';
 import Viewport from '../core/Viewport.js';
 import GroundPicker from './GroundPicker.js';
@@ -15,18 +15,19 @@ export default class CameraTouchControls {
 
     GroundPicker.create();
 
-    // Tap detection
+    // Tap detection thresholds
     this.tapMaxMs = 260;
     this.tapMaxMove = 10;
 
-    // Pointer tracking
+    // Gesture state
     this.primaryId = null;
     this.startX = this.startY = 0;
     this.lastX = this.lastY = 0;
     this.startTime = 0;
     this.moved = false;
+    this.hadPinch = false;   // ✅ new: suppress tap when a pinch happened
 
-    // Multi-touch for pinch
+    // Multi-touch points
     this.points = new Map();
     this.lastPinchDist = null;
 
@@ -47,11 +48,13 @@ export default class CameraTouchControls {
       this.startY = this.lastY = e.clientY;
       this.startTime = performance.now();
       this.moved = false;
+      this.hadPinch = false; // reset for new gesture
       this.canvas.setPointerCapture?.(e.pointerId);
     }
 
     if (this.points.size === 2) {
       this.lastPinchDist = this._currentPinchDistance();
+      this.hadPinch = true; // ✅ mark that this gesture had multitouch
     }
   };
 
@@ -67,6 +70,7 @@ export default class CameraTouchControls {
         this._zoomBy(-delta * 0.01);
       }
       this.lastPinchDist = d;
+      this.hadPinch = true; // ✅ redundant safeguard
       return;
     }
 
@@ -88,12 +92,16 @@ export default class CameraTouchControls {
   onUp = (e) => {
     const wasPrimary = e.pointerId === this.primaryId;
 
+    // Remove point
+    this.points.delete(e.pointerId);
+
     if (wasPrimary) {
       const dt = performance.now() - this.startTime;
       const movedMag = Math.hypot(this.lastX - this.startX, this.lastY - this.startY);
       const wasTap = movedMag <= this.tapMaxMove && dt <= this.tapMaxMs;
 
-      if (wasTap) {
+      // ✅ Only treat as tap if NO pinch occurred during the gesture
+      if (wasTap && !this.hadPinch) {
         const point = GroundPicker.instance?.pick(e.clientX, e.clientY);
         if (point) window.dispatchEvent(new CustomEvent('ground:tap', { detail: { point } }));
       }
@@ -101,11 +109,13 @@ export default class CameraTouchControls {
       this.canvas.releasePointerCapture?.(e.pointerId);
       this.primaryId = null;
       this.moved = false;
+      this.hadPinch = false;
     }
 
-    this.points.delete(e.pointerId);
+    // Reset pinch state if fewer than 2 pointers remain
     if (this.points.size < 2) this.lastPinchDist = null;
 
+    // Pick a new primary if one finger remains
     if (!this.primaryId && this.points.size === 1) {
       const [id, pt] = this.points.entries().next().value;
       this.primaryId = id;
@@ -113,6 +123,8 @@ export default class CameraTouchControls {
       this.startY = this.lastY = pt.y;
       this.startTime = performance.now();
       this.moved = false;
+      // keep hadPinch as-is? new single-finger gesture, so reset:
+      this.hadPinch = false;
     }
   };
 
