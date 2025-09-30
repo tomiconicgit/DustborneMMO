@@ -32,7 +32,7 @@ export default class Movement {
     this.halfX = (WORLD_WIDTH * TILE_SIZE) * 0.5;
     this.halfZ = (WORLD_DEPTH * TILE_SIZE) * 0.5;
 
-    // Stuck detection (prevents rare freezes on tiny waypoint jitter)
+    // Stuck detection
     this._stuckClock = 0;
     this._movedAcc = 0;
     this._lastPos = new THREE.Vector3();
@@ -44,9 +44,7 @@ export default class Movement {
     this._unsub = UpdateBus.on((dt) => this.update(dt));
   }
 
-  // -----------------------
-  // External helper: walk to a world position (center of tile, etc.) then callback
-  // -----------------------
+  // Walk to world position; optional callback on arrival
   walkTo(pos, onArrive) {
     const ch = Character.instance?.object3D;
     if (!ch || !pos) return;
@@ -59,10 +57,12 @@ export default class Movement {
     }
   }
 
-  // -----------------------
   // Input → plan a new path from tap
-  // -----------------------
   onGroundTap = (ev) => {
+    // ---- dev marker mode: disable tap-to-move when toggled ON ----
+    if (window.__DEV_MARKER_MODE__) return;
+    // --------------------------------------------------------------
+
     const hit = ev?.detail?.point;
     const ch = Character.instance?.object3D;
     if (!hit || !ch) return;
@@ -90,9 +90,7 @@ export default class Movement {
     this._lastPos.copy(curPos);
   }
 
-  // -----------------------
   // Per-frame update
-  // -----------------------
   update(dt) {
     const ch        = Character.instance?.object3D;
     const animator  = CharacterAnimator.main;
@@ -104,7 +102,7 @@ export default class Movement {
       const target = this.path[this.pathIndex];
 
       // Vector to current waypoint (XZ only)
-      const to = new THREE.Vector3().subVectors(target, ch.position); 
+      const to = new THREE.Vector3().subVectors(target, ch.position);
       to.y = 0;
       const dist = to.length();
 
@@ -112,7 +110,7 @@ export default class Movement {
         // Waypoint reached → advance
         this.pathIndex++;
         if (this.pathIndex >= this.path.length) {
-          // Final destination reached → idle and fire callback
+          // Final destination → idle and fire callback
           this._finish(animator);
           if (this._onArrive) { const cb = this._onArrive; this._onArrive = null; try { cb(); } catch {} }
           return;
