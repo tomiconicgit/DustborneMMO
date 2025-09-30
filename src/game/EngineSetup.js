@@ -11,7 +11,7 @@ export default class EngineSetup {
       { name: 'Lighting',             path: paths.lighting },
       { name: 'Sky',                  path: paths.sky },
 
-      // Core update + input (tap-to-move + orbit/pinch)
+      // Core update + input
       { name: 'UpdateBus',            path: paths.updateBus },
       { name: 'GroundPicker',         path: paths.groundPicker },
       { name: 'CameraTouchControls',  path: paths.cameraControls },
@@ -26,9 +26,12 @@ export default class EngineSetup {
       { name: 'Character',            path: paths.character },
       { name: 'CharacterAnimator',    path: paths.characterAnimator },
 
-      // Navigation + movement (tap-to-move)
+      // Navigation + movement
       { name: 'Pathfinding',          path: paths.pathfinding },
       { name: 'Movement',             path: paths.movement },
+
+      // Rendering helpers
+      { name: 'OcclusionFader',       path: paths.occlusionFader },   // ← NEW
 
       // Dev & Audio
       { name: 'GridToggle',           path: paths.devGrid },
@@ -36,9 +39,6 @@ export default class EngineSetup {
 
       // UI
       { name: 'InventoryUI',          path: paths.inventoryUI },
-
-      // NEW: draw the copper chunk icon once at boot
-      { name: 'ItemIcons',            path: paths.itemIcons },
     ];
   }
 }
