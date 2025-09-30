@@ -49,7 +49,7 @@ export default class Movement {
     path.forEach(p => p.y = 0);
     this.currentPath = path;
     this.currentIndex = 0;
-    CharacterAnimator.main?.playWalk();
+    CharacterAnimator.main?.playWalk(); // ensure loop at path start
   }
 
   update(dt) {
@@ -66,14 +66,14 @@ export default class Movement {
     let movingByJoy = false;
 
     if (jLen > 0.08) {
-      const dir = new THREE.Vector3(j.x, 0, -j.y).normalize(); // y-up screen to world
+      const dir = new THREE.Vector3(j.x, 0, -j.y).normalize();
       ch.position.addScaledVector(dir, this.speed * dt);
       const targetYaw = Math.atan2(dir.x, dir.z);
       this.characterYaw = this._lerpAngle(this.characterYaw, targetYaw, Math.min(1, this.turnLerp * dt));
       modelRoot.rotation.set(0, this.characterYaw, 0);
       this.currentPath = null;
       movingByJoy = true;
-      CharacterAnimator.main?.playWalk();
+      CharacterAnimator.main?.playWalk(); // keep loop alive while stick held
     }
 
     // 2) Path following
@@ -93,12 +93,15 @@ export default class Movement {
         const targetYaw = Math.atan2(dir.x, dir.z);
         this.characterYaw = this._lerpAngle(this.characterYaw, targetYaw, Math.min(1, this.turnLerp * dt));
         modelRoot.rotation.set(0, this.characterYaw, 0);
-        CharacterAnimator.main?.playWalk();
+        CharacterAnimator.main?.playWalk(); // ensure looping during path move
       }
     }
 
-    // 3) Camera lazy follow
+    // 3) If neither joystick nor path is moving, ensure idle (stop loop)
     const isMoving = movingByJoy || (!!this.currentPath && this.currentIndex < (this.currentPath?.length || 0));
+    if (!isMoving) CharacterAnimator.main?.stopAll();
+
+    // 4) Camera lazy follow + update
     Camera.main?.followUpdate?.(dt, this.characterYaw, isMoving);
     Camera.main?.update?.();
   }
