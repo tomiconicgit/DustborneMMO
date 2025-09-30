@@ -82,17 +82,40 @@ class PriorityQueue {
 }
 
 export default class Pathfinding {
+  // 🔁 Shared/singleton behavior so every system uses the same grid
+  static main = null;
+  static sharedGrid = new TileGrid();
+
+  // Allow the engine to instantiate early via manifest
+  static create() {
+    if (!Pathfinding.main) {
+      Pathfinding.main = new Pathfinding({ useShared: true });
+    }
+  }
+
   /**
    * @param {Object} opts
    * @param {boolean} [opts.diagonal=true]       Allow 8-way movement
    * @param {number}  [opts.tileCost=1]          Orthogonal step cost
    * @param {number}  [opts.diagonalCost=Math.SQRT2] Diagonal step cost
+   * @param {boolean} [opts.useShared=true]      Use shared global grid
    */
   constructor(opts = {}) {
-    this.grid = new TileGrid();
-    this.diagonal = (opts.diagonal === undefined) ? true : !!opts.diagonal;
-    this.tileCost = (typeof opts.tileCost === 'number') ? opts.tileCost : 1;
-    this.diagonalCost = (typeof opts.diagonalCost === 'number') ? opts.diagonalCost : Math.SQRT2;
+    const {
+      diagonal = true,
+      tileCost = 1,
+      diagonalCost = Math.SQRT2,
+      useShared = true
+    } = opts;
+
+    // Everyone points at the same grid by default
+    this.grid = useShared ? Pathfinding.sharedGrid : new TileGrid();
+    this.diagonal = !!diagonal;
+    this.tileCost = tileCost;
+    this.diagonalCost = diagonalCost;
+
+    // Register the first constructed instance as the singleton
+    if (!Pathfinding.main) Pathfinding.main = this;
   }
 
   /** Expose the grid so the game can mark obstacles at runtime. */
@@ -101,7 +124,7 @@ export default class Pathfinding {
   /** Heuristic: Manhattan for 4-way, Octile for 8-way. */
   _heuristic(a, b) {
     const dx = Math.abs(a.x - b.x);
-    const dz = Math.abs(a.z - b.z);
+    const dz = Math.abs(b.z - a.z) || Math.abs(a.z - b.z); // tolerate both orders
     if (!this.diagonal) return (dx + dz) * this.tileCost;
     const D = this.tileCost, D2 = this.diagonalCost;
     return D * (dx + dz) + (D2 - 2 * D) * Math.min(dx, dz);
