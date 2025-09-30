@@ -17,22 +17,12 @@ export default class Character {
   constructor() {
     this.object3D = new THREE.Group();
     this.object3D.name = 'PlayerCharacter';
-
-    // Center on center tile (0.5, 0.5)
-    const HALF_TILE = 0.5 * TILE_SIZE;
-    this.object3D.position.set(HALF_TILE, 0, HALF_TILE);
-
-    this.modelRoot = null;   // will hold the loaded mesh root
-    this.mixer = null;       // optional, set by CharacterAnimator
+    this.modelRoot = null;
+    this.mixer = null;
   }
 
-  setMixer(mixer) {
-    this.mixer = mixer;
-  }
-
-  get root() {
-    return this.modelRoot || this.object3D;
-  }
+  setMixer(mixer) { this.mixer = mixer; }
+  get root() { return this.modelRoot || this.object3D; }
 
   async _load() {
     const scene = Scene.main;
@@ -44,20 +34,19 @@ export default class Character {
 
     const model = gltf.scene || gltf.scenes?.[0];
     if (!model) throw new Error('GLB has no scene.');
-
-    model.traverse((o) => {
-      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
-    });
-
+    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     model.position.set(0, 0.01, 0);
+
+    // ✅ Start at exact world center tile
+    const cx = Math.floor(WORLD_WIDTH * 0.5);
+    const cz = Math.floor(WORLD_DEPTH * 0.5);
+    const startX = (cx + 0.5) * TILE_SIZE;      // 15.5
+    const startZ = (cz + 0.5) * TILE_SIZE;      // 15.5
+    this.object3D.position.set(startX, 0, startZ);
 
     this.modelRoot = model;
     this.object3D.add(model);
     scene.add(this.object3D);
-
-    // World half extents (if needed later)
-    this.halfX = (WORLD_WIDTH * TILE_SIZE) / 2;
-    this.halfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
 
     Camera.main?.setTarget?.(this.object3D);
   }
