@@ -18,11 +18,16 @@ export default class Viewport {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // ✅ Soft shadows enabled
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
     document.body.appendChild(this.renderer.domElement);
 
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
 
-    this.clock = new THREE.Clock();       // NEW
+    this.clock = new THREE.Clock();
     this.isRunning = false;
   }
 
@@ -43,8 +48,8 @@ export default class Viewport {
     const camera = Camera.main?.threeCamera || Camera.main;
     if (!scene || !camera) return;
 
-    const dt = this.clock.getDelta();     // NEW
-    UpdateBus.tick(dt);                   // NEW
+    const dt = this.clock.getDelta();
+    UpdateBus.tick(dt);
 
     this.renderer.render(scene, camera);
   }
