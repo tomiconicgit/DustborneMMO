@@ -18,12 +18,16 @@ export default class Movement {
     // Movement & turning
     this.speed      = 2.5;    // world units per second
     this.turnLerp   = 10.0;   // higher = snappier character facing
-    this.epsilon    = 0.001;
     this.characterYaw = 0;
 
-    // World bounds (same as terrain)
+    // World bounds
     this.halfX = (WORLD_WIDTH * TILE_SIZE) * 0.5;
     this.halfZ = (WORLD_DEPTH * TILE_SIZE) * 0.5;
+
+    // Scratch vectors to avoid allocs
+    this._fwd = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._dir = new THREE.Vector3();
 
     // Per-frame update
     this._unsub = UpdateBus.on((dt) => this.update(dt));
@@ -33,30 +37,41 @@ export default class Movement {
     const ch        = Character.instance?.object3D;
     const animator  = CharacterAnimator.main;
     const modelRoot = animator?.modelRoot;
-    if (!ch || !animator || !modelRoot) return;
+    const camObj    = Camera.main?.threeCamera || Camera.main;
+    if (!ch || !animator || !modelRoot || !camObj) return;
 
-    // Animate (walk loop, etc.)
+    // Animate mixer
     animator.update(dt);
 
-    // Joystick vector (screen x→world +x, screen y→world -z)
+    // Joystick vector (x:right, y:forward on screen)
     const v = this.joy?.getVector() || { x:0, y:0 };
     const mag = Math.hypot(v.x, v.y);
 
     let isMoving = false;
 
     if (mag > 0.08) {
-      // Normalized world direction
-      const dir = new THREE.Vector3(v.x, 0, -v.y).normalize();
+      // --- CAMERA-RELATIVE MOVE ---
+      // Camera forward projected onto XZ as "screen forward"
+      this._fwd.set(0,0, -1).applyQuaternion(camObj.quaternion); // cam -Z
+      this._fwd.y = 0;
+      if (this._fwd.lengthSq() > 0) this._fwd.normalize(); else this._fwd.set(0,0,-1);
 
-      // Move
-      ch.position.addScaledVector(dir, this.speed * dt);
+      // Right vector in XZ plane
+      this._right.set(this._fwd.z, 0, -this._fwd.x); // perpendicular on XZ
+
+      // Combine joystick axes: dir = right*x + forward*y
+      this._dir.copy(this._right).multiplyScalar(v.x).addScaledVector(this._fwd, v.y);
+      if (this._dir.lengthSq() > 0) this._dir.normalize(); else this._dir.set(0,0,0);
+
+      // Move character
+      ch.position.addScaledVector(this._dir, this.speed * dt);
 
       // Clamp inside terrain bounds
       ch.position.x = THREE.MathUtils.clamp(ch.position.x, -this.halfX, this.halfX);
       ch.position.z = THREE.MathUtils.clamp(ch.position.z, -this.halfZ, this.halfZ);
 
-      // Smoothly face movement direction
-      const targetYaw = Math.atan2(dir.x, dir.z);
+      // Face movement direction smoothly
+      const targetYaw = Math.atan2(this._dir.x, this._dir.z);
       this.characterYaw = this._lerpAngle(this.characterYaw, targetYaw, Math.min(1, this.turnLerp * dt));
       modelRoot.rotation.set(0, this.characterYaw, 0);
 
@@ -64,7 +79,7 @@ export default class Movement {
       animator.playWalk();
       isMoving = true;
     } else {
-      // Idle (stop looping)
+      // Idle
       animator.stopAll();
     }
 
