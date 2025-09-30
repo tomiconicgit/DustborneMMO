@@ -1,61 +1,60 @@
 // file: src/engine/rendering/Sky.js
 import * as THREE from 'three';
 import Scene from '../core/Scene.js';
-import Camera from './Camera.js';
-import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from '../../game/world/WorldMap.js';
+import Viewport from '../core/Viewport.js';
+import { Sky } from 'three/addons/objects/Sky.js';
 
-export default class Sky {
+export default class SkySystem {
   static main = null;
 
   static create() {
-    if (Sky.main) return;
+    if (SkySystem.main) return;
     if (!Scene.main) throw new Error('Sky requires Scene.main');
-    Sky.main = new Sky(Scene.main);
+    SkySystem.main = new SkySystem(Scene.main);
   }
 
   constructor(scene) {
-    // Simple gradient sky dome — NO horizon fog, NO scene.fog.
-    const vertexShader = `
-      varying vec3 vWorldPosition;
-      void main() {
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = wp.xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`;
-
-    const fragmentShader = `
-      uniform vec3 topColor;
-      uniform vec3 bottomColor;
-      uniform float offset;
-      uniform float exponent;
-      varying vec3 vWorldPosition;
-      void main() {
-        float h = normalize(vWorldPosition + vec3(0.0, offset, 0.0)).y;
-        vec3 col = mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0));
-        gl_FragColor = vec4(col, 1.0);
-      }`;
-
-    const uniforms = {
-      topColor:    { value: new THREE.Color(0x87ceeb) }, // sky blue
-      bottomColor: { value: new THREE.Color(0xc8d8ff) }, // very light blue
-      offset:      { value: 0.0 },
-      exponent:    { value: 0.6 }
-    };
-
-    const cam = Camera.main?.threeCamera || Camera.main;
-    const worldMax = Math.max(WORLD_WIDTH, WORLD_DEPTH) * TILE_SIZE;
-    const radius = (cam?.far ? cam.far * 0.9 : worldMax * 20);
-
-    const skyGeo = new THREE.SphereGeometry(radius, 32, 15);
-    const skyMat = new THREE.ShaderMaterial({
-      uniforms, vertexShader, fragmentShader, side: THREE.BackSide
-    });
-
-    const sky = new THREE.Mesh(skyGeo, skyMat);
-    sky.name = 'SkyDome';
-    sky.onBeforeRender = (_r, _s, camera) => sky.position.copy(camera.position);
+    // Create the Sky object (from three/examples)
+    const sky = new Sky();
+    sky.scale.setScalar(450000); // huge dome, like the example
     scene.add(sky);
 
+    // Params from your screenshot
+    const params = {
+      turbidity: 7.0,
+      rayleigh: 1.672,
+      mieCoefficient: 0.004,
+      mieDirectionalG: 0.584,
+      elevation: 1.4,  // degrees above horizon
+      azimuth: 180.0,  // degrees
+      exposure: 0.5
+    };
+
+    // Apply uniforms
+    const u = sky.material.uniforms;
+    u['turbidity'].value = params.turbidity;
+    u['rayleigh'].value = params.rayleigh;
+    u['mieCoefficient'].value = params.mieCoefficient;
+    u['mieDirectionalG'].value = params.mieDirectionalG;
+
+    // Position the sun exactly like the example controls do
+    const phi   = THREE.MathUtils.degToRad(90 - params.elevation);
+    const theta = THREE.MathUtils.degToRad(params.azimuth);
+    const sun = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
+    u['sunPosition'].value.copy(sun);
+
+    // Match the example’s exposure (tone mapping exposure on the renderer)
+    const renderer = Viewport.instance?.renderer;
+    if (renderer) {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping; // same as demo
+      renderer.toneMappingExposure = params.exposure;
+    }
+
+    // Store refs if we want to tweak later
     this.sky = sky;
+    this.params = params;
+
+    // No fog or horizon ring here — per your request “remove fog from sky”.
+    // (If you had a previous HorizonFog/Haze, make sure it’s not in the manifest.)
   }
 }
