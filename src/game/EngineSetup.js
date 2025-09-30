@@ -11,7 +11,7 @@ export default class EngineSetup {
       { name: 'Lighting',             path: paths.lighting },
       { name: 'Sky',                  path: paths.sky },
 
-      // Input/core utils
+      // Core update + input (tap-to-move + orbit/pinch)
       { name: 'UpdateBus',            path: paths.updateBus },
       { name: 'GroundPicker',         path: paths.groundPicker },
       { name: 'CameraTouchControls',  path: paths.cameraControls },
@@ -22,15 +22,15 @@ export default class EngineSetup {
       { name: 'StaticObjectMap',      path: paths.staticObjectMap },
       { name: 'ChunkManager',         path: paths.chunkManager },
 
-      // Player + anim
+      // Character & animation
       { name: 'Character',            path: paths.character },
       { name: 'CharacterAnimator',    path: paths.characterAnimator },
 
-      // Navigation + movement
+      // Navigation + movement (tap-to-move)
       { name: 'Pathfinding',          path: paths.pathfinding },
       { name: 'Movement',             path: paths.movement },
 
-      // Dev / audio
+      // Dev & Audio
       { name: 'GridToggle',           path: paths.devGrid },
       { name: 'SoundManager',         path: paths.soundManager },
     ];
