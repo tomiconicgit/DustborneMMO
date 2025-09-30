@@ -1,71 +1,77 @@
 // file: src/game/character/CharacterAnimator.js
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Character from './Character.js';
 
 export default class CharacterAnimator {
   static main = null;
-
   static async create() {
     if (CharacterAnimator.main) return;
     CharacterAnimator.main = new CharacterAnimator();
-    await CharacterAnimator.main._load();
+    await CharacterAnimator.main._init();
   }
 
   constructor() {
     this.mixer = null;
-    this.actions = {};
-    this.clock = new THREE.Clock(); // movement system can tick mixer too; clock is backup
-    this.autoUpdate = false;        // mixer update is driven by Movement/UpdateBus
+    this.walkClip = null;
+    this.walkAction = null;
+    this.active = null; // 'walk' | null
   }
 
-  async _load() {
-    if (!Character.instance?.root) throw new Error('Character must be loaded before CharacterAnimator.');
-    const target = Character.instance.root;
+  async _init() {
+    // Grab the loaded character model root
+    const root = Character.instance?.object3D;
+    if (!root) throw new Error('CharacterAnimator requires Character.instance');
 
-    // Create AnimationMixer targeting the character model root
-    this.mixer = new THREE.AnimationMixer(target);
-    Character.instance.setMixer(this.mixer);
+    // The skinned model is the first child under the Character group.
+    const modelRoot = root.children[0];
+    if (!modelRoot) throw new Error('Character model not found for animator.');
+
+    // Mixer on the model
+    this.mixer = new THREE.AnimationMixer(modelRoot);
+
+    // Expose to other systems (Movement already reads these)
+    Character.instance.mixer = this.mixer;
+    Character.instance.root  = modelRoot;
 
     // Load walk animation
-    const animURL = new URL('../../assets/models/character/anim-walking.glb', import.meta.url).href;
-    const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(animURL);
+    const url = new URL('../../assets/models/character/anim-walking.glb', import.meta.url).href;
+    const gltf = await new GLTFLoader().loadAsync(url);
+    this.walkClip = gltf.animations?.[0] || null;
 
-    const clip = gltf.animations?.[0];
-    if (!clip) {
-      console.warn('anim-walking.glb contains no animations. Skipping.');
+    if (this.walkClip) {
+      this.walkAction = this.mixer.clipAction(this.walkClip);
+      this.walkAction.setLoop(THREE.LoopRepeat, Infinity);   // <-- LOOP
+      this.walkAction.clampWhenFinished = false;
+      this.walkAction.enabled = true;
+      this.walkAction.weight = 1.0;
+      this.walkAction.timeScale = 1.0;                       // tweak for speed feel
+    }
+  }
+
+  playWalk() {
+    if (!this.walkAction) return;
+    if (this.active === 'walk' && this.walkAction.isRunning() && !this.walkAction.paused) {
+      // already looping
       return;
     }
-
-    const action = this.mixer.clipAction(clip);
-    action.loop = THREE.LoopRepeat;
-    action.clampWhenFinished = false;
-    action.enabled = true;
-    action.weight = 1.0;
-    this.actions.walk = action;
+    // (Re)start loop cleanly
+    this.walkAction.reset();
+    this.walkAction.paused = false;
+    this.walkAction.play();
+    this.active = 'walk';
   }
 
-  playWalk() { this._play('walk'); }
   stopAll() {
-    Object.values(this.actions).forEach(a => {
-      a.stop();
-      a.paused = true;
-    });
-  }
-  _play(name) {
-    const a = this.actions[name];
-    if (!a) return;
-    // Fade in the requested action and stop others
-    Object.entries(this.actions).forEach(([k, act]) => {
-      if (k === name) {
-        act.reset();
-        act.paused = false;
-        act.play();
-      } else {
-        act.stop();
-        act.paused = true;
-      }
-    });
+    if (this.walkAction) {
+      // quick blend out
+      this.walkAction.fadeOut(0.15);
+      // ensure fully stopped after fade
+      setTimeout(() => {
+        this.walkAction.stop();
+        this.walkAction.reset();
+      }, 180);
+    }
+    this.active = null;
   }
 }
