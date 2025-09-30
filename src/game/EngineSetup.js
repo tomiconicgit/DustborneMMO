@@ -4,18 +4,18 @@ import paths from '../Router.js';
 export default class EngineSetup {
   getManifest() {
     return [
-      // Core
+      // Engine base
       { name: 'Scene',                path: paths.scene },
       { name: 'Camera',               path: paths.camera },
       { name: 'Viewport',             path: paths.viewport },
       { name: 'Lighting',             path: paths.lighting },
       { name: 'Sky',                  path: paths.sky },
-      { name: 'SoundManager',         path: paths.soundManager },
 
-      // Tick + input
+      // Input/core utils
       { name: 'UpdateBus',            path: paths.updateBus },
       { name: 'GroundPicker',         path: paths.groundPicker },
       { name: 'CameraTouchControls',  path: paths.cameraControls },
+      { name: 'VirtualJoystick',      path: paths.virtualJoystick },
 
       // World
       { name: 'WorldMap',             path: paths.worldMap },
@@ -23,16 +23,17 @@ export default class EngineSetup {
       { name: 'StaticObjectMap',      path: paths.staticObjectMap },
       { name: 'ChunkManager',         path: paths.chunkManager },
 
-      // Character
+      // Player + anim
       { name: 'Character',            path: paths.character },
-      { name: 'CharacterAnimator',    path: paths.characterAnimator }, // <-- after Character
+      { name: 'CharacterAnimator',    path: paths.characterAnimator },
 
-      // Navigation
+      // Navigation + movement
       { name: 'Pathfinding',          path: paths.pathfinding },
-      { name: 'Movement',             path: paths.movement },          // <-- uses both
+      { name: 'Movement',             path: paths.movement },
 
-      // Dev
+      // Dev tools / audio
       { name: 'GridToggle',           path: paths.devGrid },
+      { name: 'SoundManager',         path: paths.soundManager },
     ];
   }
 }
