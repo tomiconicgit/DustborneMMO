@@ -17,6 +17,12 @@ export default class Character {
   constructor() {
     this.object3D = new THREE.Group();
     this.object3D.name = 'PlayerCharacter';
+
+    // Center of 30x30 in world coords (tile centers are +0.5)
+    const cx = Math.floor(WORLD_WIDTH  / 2)  + 0.5;  // 15.5 for 30
+    const cz = Math.floor(WORLD_DEPTH / 2)   + 0.5;  // 15.5 for 30
+    this.object3D.position.set(cx * TILE_SIZE, 0, cz * TILE_SIZE);
+
     this.modelRoot = null;
     this.mixer = null;
   }
@@ -29,20 +35,13 @@ export default class Character {
     if (!scene) throw new Error('Scene must be created before Character.');
 
     const modelURL = new URL('../../assets/models/character/character.glb', import.meta.url).href;
-    const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(modelURL);
+    const gltf = await new GLTFLoader().loadAsync(modelURL);
 
     const model = gltf.scene || gltf.scenes?.[0];
     if (!model) throw new Error('GLB has no scene.');
-    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    model.position.set(0, 0.01, 0);
 
-    // ✅ Start at exact world center tile
-    const cx = Math.floor(WORLD_WIDTH * 0.5);
-    const cz = Math.floor(WORLD_DEPTH * 0.5);
-    const startX = (cx + 0.5) * TILE_SIZE;      // 15.5
-    const startZ = (cz + 0.5) * TILE_SIZE;      // 15.5
-    this.object3D.position.set(startX, 0, startZ);
+    model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    model.position.set(0, 0.01, 0);
 
     this.modelRoot = model;
     this.object3D.add(model);
