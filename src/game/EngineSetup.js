@@ -37,7 +37,7 @@ export default class EngineSetup {
       // UI
       { name: 'InventoryUI',          path: paths.inventoryUI },
 
-      // NEW: draw a clean copper chunk icon once at boot
+      // NEW: draw the copper chunk icon once at boot
       { name: 'ItemIcons',            path: paths.itemIcons },
     ];
   }
