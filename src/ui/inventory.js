@@ -2,6 +2,8 @@
 // Minimal floating Inventory UI (button + bottom sheet grid)
 // - Circular button on the left edge with a bag icon
 // - Bottom sheet slides up/down; 3 rows x 5 columns of "invisible" item slots
+// - Adds: setSlotIcon(index, dataURL) + quantity badge
+// - Auto-drops the procedural copper chunk icon in slot 0 when ready
 
 export default class InventoryUI {
   static instance = null;
@@ -15,6 +17,12 @@ export default class InventoryUI {
     this._injectStyles();
     this._buildDOM();
     this._wireEvents();
+
+    // Listen for generated copper icon and show it in slot 0 as a demo
+    window.addEventListener('icon:copper-ready', (e) => {
+      const dataURL = e?.detail?.dataURL;
+      if (dataURL) this.setSlotIcon(0, dataURL);
+    });
   }
 
   _injectStyles() {
@@ -110,17 +118,40 @@ export default class InventoryUI {
         padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
       }
 
-      /* Invisible item slots: reserve space only (no borders) */
+      /* Invisible item slots */
       .inv-slot {
+        position: relative;
         min-height: var(--inv-slot-min);
-        border-radius: 10px; /* radius helps future hover/focus rings, but remains invisible */
+        border-radius: 10px;
         display: grid;
         place-items: center;
+        overflow: visible;
       }
 
-      /* Optional placeholder style when debugged – left off by default
-         .inv-slot::before { content:''; inset:0; position:absolute; border:1px dashed rgba(255,255,255,.07); border-radius:10px; }
-      */
+      .inv-slot img {
+        display: block;
+        max-width: 80%;
+        max-height: 80%;
+        image-rendering: auto;
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35));
+        pointer-events: none;
+      }
+
+      .inv-qty {
+        position: absolute;
+        right: 4px;
+        bottom: 4px;
+        min-width: 20px;
+        padding: 2px 6px;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        color: #111;
+        background: rgba(255,255,255,0.9);
+        border-radius: 10px;
+        border: 1px solid rgba(0,0,0,0.15);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      }
 
       /* Touch affordances */
       @media (pointer: coarse) {
@@ -164,17 +195,23 @@ export default class InventoryUI {
     head.innerHTML = `<div class="inv-sheet__grab"></div>`;
 
     // Grid: 3 rows x 5 columns (15 empty, invisible slots)
-    const grid = document.createElement('div');
-    grid.className = 'inv-grid';
+    this.grid = document.createElement('div');
+    this.grid.className = 'inv-grid';
     for (let i = 0; i < 15; i++) {
       const slot = document.createElement('div');
       slot.className = 'inv-slot';
       slot.dataset.index = String(i);
-      grid.appendChild(slot);
+      // Pre-create qty badge
+      const qty = document.createElement('div');
+      qty.className = 'inv-qty';
+      qty.textContent = '';
+      qty.style.display = 'none';
+      slot.appendChild(qty);
+      this.grid.appendChild(slot);
     }
 
     this.sheet.appendChild(head);
-    this.sheet.appendChild(grid);
+    this.sheet.appendChild(this.grid);
 
     // Mount
     document.body.appendChild(this.button);
@@ -216,5 +253,33 @@ export default class InventoryUI {
 
   toggle() {
     this.isOpen ? this.close() : this.open();
+  }
+
+  /** Set/replace an icon image for a slot (0..14). */
+  setSlotIcon(index, dataURL) {
+    const slot = this.grid.querySelector(`.inv-slot[data-index="${index}"]`);
+    if (!slot) return;
+    let img = slot.querySelector('img');
+    if (!img) {
+      img = document.createElement('img');
+      slot.appendChild(img);
+    }
+    img.src = dataURL;
+    img.alt = 'Item';
+  }
+
+  /** Set a numeric quantity badge for a slot; hide when <= 0 or null. */
+  setSlotQty(index, qty) {
+    const slot = this.grid.querySelector(`.inv-slot[data-index="${index}"]`);
+    if (!slot) return;
+    const badge = slot.querySelector('.inv-qty');
+    if (!badge) return;
+    if (qty == null || qty <= 0) {
+      badge.style.display = 'none';
+      badge.textContent = '';
+    } else {
+      badge.style.display = 'block';
+      badge.textContent = String(qty);
+    }
   }
 }
