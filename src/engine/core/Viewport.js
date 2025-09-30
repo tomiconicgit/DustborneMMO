@@ -15,14 +15,24 @@ export default class Viewport {
   constructor() {
     if (Viewport.instance) throw new Error("Viewport is a singleton. Use Viewport.instance.");
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,        // keep transparent so UI shows over it
+      powerPreference: 'high-performance'
+    });
 
-    // ✅ Soft shadows enabled
+    // ✅ Color space + tone mapping
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05; // base; Sky can override
+
+    // ✅ Soft shadow setup
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // (autoUpdate true by default; leave it)
 
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(this.renderer.domElement);
 
     window.addEventListener('resize', this.onWindowResize.bind(this), false);
