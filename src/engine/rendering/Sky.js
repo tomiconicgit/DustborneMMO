@@ -19,15 +19,15 @@ export default class SkySystem {
     sky.scale.setScalar(450000);
     scene.add(sky);
 
-    // Default params (matching your screenshot, with lower elevation to bring horizon down)
+    // Midday vibe: higher sun elevation, slightly brighter exposure
     this.params = {
       turbidity: 7.0,
-      rayleigh: 1.672,
+      rayleigh: 1.6,
       mieCoefficient: 0.004,
-      mieDirectionalG: 0.584,
-      elevation: 0.8,    // degrees
-      azimuth: 180.0,    // degrees
-      exposure: 0.5
+      mieDirectionalG: 0.58,
+      elevation: 60.0,   // ← high sun (midday)
+      azimuth: 180.0,    // south-ish; tweak if you want different “time”
+      exposure: 0.85     // brighter overall
     };
 
     this.sky = sky;
@@ -36,7 +36,7 @@ export default class SkySystem {
     // Apply once
     this.applyParams();
 
-    // Keep a tiny helper sphere OFF (no visible sun mesh)
+    // No visible helper mesh
     this.sunHelper = null;
   }
 
@@ -45,10 +45,10 @@ export default class SkySystem {
     const { turbidity, rayleigh, mieCoefficient, mieDirectionalG, elevation, azimuth, exposure } = this.params;
 
     const u = this.sky.material.uniforms;
-    u['turbidity'].value = turbidity;
-    u['rayleigh'].value = rayleigh;
-    u['mieCoefficient'].value = mieCoefficient;
-    u['mieDirectionalG'].value = mieDirectionalG;
+    u['turbidity'].value        = turbidity;
+    u['rayleigh'].value         = rayleigh;
+    u['mieCoefficient'].value   = mieCoefficient;
+    u['mieDirectionalG'].value  = mieDirectionalG;
 
     // Convert sun angles -> direction vector expected by Sky shader
     const phi   = THREE.MathUtils.degToRad(90 - elevation);
@@ -79,12 +79,13 @@ export default class SkySystem {
     return this.sun.clone().normalize();
   }
 
-  /** Rough “color temperature” based on sun elevation. Returns THREE.Color. */
+  /**
+   * Daylight color: warm at horizon -> neutral/white by midday.
+   * Map 0°..60° to warm..neutral; clamp beyond that.
+   */
   colorForElevation() {
-    // Warm at horizon -> neutral higher up
-    // Map 0°..15° to 2400K..6500K-ish via simple lerp in RGB space
-    const elev = Math.max(0, Math.min(15, this.params.elevation));
-    const t = elev / 15; // 0 near horizon, 1 when higher
+    const elev = THREE.MathUtils.clamp(this.params.elevation, 0, 60);
+    const t = elev / 60; // 0 near horizon, 1 by midday
     const warm = new THREE.Color(0xFFD2A6);  // peachy warm
     const neutral = new THREE.Color(0xFFFFFF);
     return warm.lerp(neutral, t);
