@@ -47,15 +47,17 @@ export default class ChunkManager {
     const scene = Scene.main;
     if (!scene) return;
 
-    // Shared loader and prototype cache per "type"
     const loader = new GLTFLoader();
     const protoCache = new Map();
 
     const getPrototype = async (type) => {
-      if (protoCache.has(type)) return protoCache.get(type);
+      // accept both spellings just in case
+      const t = (type === 'ore-copper') ? 'copper-ore' : type;
+
+      if (protoCache.has(t)) return protoCache.get(t);
 
       let url = null;
-      switch (type) {
+      switch (t) {
         case 'copper-ore':
           url = new URL('../../assets/models/rocks/copper-ore.glb', import.meta.url).href;
           break;
@@ -73,7 +75,7 @@ export default class ChunkManager {
         if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
       });
 
-      protoCache.set(type, root);
+      protoCache.set(t, root);
       return root;
     };
 
@@ -82,8 +84,8 @@ export default class ChunkManager {
     scene.add(rootGroup);
 
     const pf = Pathfinding.main || null;
+    let spawnCount = 0;
 
-    // Iterate over the StaticObjectMap tiles
     for (const key in STATIC_OBJECTS) {
       if (!Object.prototype.hasOwnProperty.call(STATIC_OBJECTS, key)) continue;
 
@@ -97,26 +99,24 @@ export default class ChunkManager {
 
       for (let i = 0; i < list.length; i++) {
         const spec = list[i] || {};
-        const type = spec.type;
-        if (!type) continue;
-
-        const proto = await getPrototype(type);
+        const proto = await getPrototype(spec.type);
         if (!proto) continue;
 
         const inst = proto.clone(true);
-        inst.name = `${type}-${tx}-${tz}-${i}`;
+        inst.name = `${spec.type}-${tx}-${tz}-${i}`;
 
         // Place at the tile center; keep the model's baked Y (inst.position.y)
         const worldX = (tx + 0.5) * TILE_SIZE;
         const worldZ = (tz + 0.5) * TILE_SIZE;
         inst.position.set(worldX, inst.position.y, worldZ);
 
-        // Optional yaw per instance (radians). Default 0.
+        // Optional yaw per instance (radians)
         if (typeof spec.yaw === 'number') {
           inst.rotation.y += spec.yaw;
         }
 
         rootGroup.add(inst);
+        spawnCount++;
 
         // Mark the tile as non-walkable in the shared pathfinding grid
         if (pf?.grid) {
@@ -125,6 +125,6 @@ export default class ChunkManager {
       }
     }
 
-    Debugger.log('Static objects spawned:', rootGroup);
+    Debugger.log(`Static objects spawned: ${spawnCount}`, rootGroup);
   }
 }
