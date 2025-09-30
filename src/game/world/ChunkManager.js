@@ -19,9 +19,7 @@ export default class ChunkManager {
   }
 
   constructor() {
-    if (ChunkManager.instance) {
-      throw new Error('ChunkManager is a singleton.');
-    }
+    if (ChunkManager.instance) throw new Error('ChunkManager is a singleton.');
 
     const scene = Scene.main;
     if (!scene) {
@@ -33,10 +31,8 @@ export default class ChunkManager {
     const ground = TerrainGenerator.create();
     scene.add(ground);
 
-    // Ensure we have a shared pathfinding grid early
     Pathfinding.create?.();
 
-    // Spawn statics (ores etc.) asynchronously
     this._spawnStaticObjects().catch(err => {
       Debugger.error('Failed to spawn static objects', err);
     });
@@ -48,29 +44,19 @@ export default class ChunkManager {
     const scene = Scene.main;
     if (!scene) return;
 
-    // Shared loader and prototype cache per "type"
     const loader = new GLTFLoader();
     const protoCache = new Map();
 
-    // Normalize type aliases (accept both 'copper-ore' and 'ore-copper')
-    const normalizeType = (t) => {
-      if (!t) return t;
-      const s = String(t).toLowerCase();
-      if (s === 'copper-ore' || s === 'ore-copper') return 'copper-ore';
-      return s;
-    };
-
-    const getPrototype = async (typeRaw) => {
-      const type = normalizeType(typeRaw);
+    const getPrototype = async (type) => {
       if (protoCache.has(type)) return protoCache.get(type);
 
       let url = null;
       switch (type) {
-        case 'copper-ore':
+        case 'copper-ore': // <-- keep type spelling consistent with StaticObjectMap
           url = new URL('../../assets/models/rocks/copper-ore.glb', import.meta.url).href;
           break;
         default:
-          Debugger.warn(`Unknown static object type: ${typeRaw}`);
+          Debugger.warn(`Unknown static object type: ${type}`);
           return null;
       }
 
@@ -78,9 +64,7 @@ export default class ChunkManager {
       const root = gltf.scene || gltf.scenes?.[0];
       if (!root) return null;
 
-      root.traverse(o => {
-        if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
-      });
+      root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
       protoCache.set(type, root);
       return root;
@@ -92,7 +76,6 @@ export default class ChunkManager {
 
     const pf = Pathfinding.main || null;
 
-    // Iterate over the StaticObjectMap tiles
     for (const key in STATIC_OBJECTS) {
       if (!Object.prototype.hasOwnProperty.call(STATIC_OBJECTS, key)) continue;
 
@@ -106,36 +89,27 @@ export default class ChunkManager {
 
       for (let i = 0; i < list.length; i++) {
         const spec = list[i] || {};
-        const normalizedType = normalizeType(spec.type);
-        if (!normalizedType) continue;
+        const type = spec.type;
+        if (!type) continue;
 
-        const proto = await getPrototype(normalizedType);
+        const proto = await getPrototype(type);
         if (!proto) continue;
 
         const inst = proto.clone(true);
-        inst.name = `${normalizedType}-${tx}-${tz}-${i}`;
+        inst.name = `${type}-${tx}-${tz}-${i}`;
 
-        // Place at the tile center; keep the model's baked Y (inst.position.y)
         const worldX = (tx + 0.5) * TILE_SIZE;
         const worldZ = (tz + 0.5) * TILE_SIZE;
         inst.position.set(worldX, inst.position.y, worldZ);
 
-        // Optional yaw per instance (radians)
-        if (typeof spec.yaw === 'number') {
-          inst.rotation.y += spec.yaw;
-        }
+        if (typeof spec.yaw === 'number') inst.rotation.y += spec.yaw;
 
         rootGroup.add(inst);
 
-        // Mark the tile as non-walkable in the shared pathfinding grid
-        if (pf?.grid) {
-          pf.grid.setWalkable(tx, tz, false);
-        }
+        if (pf?.grid) pf.grid.setWalkable(tx, tz, false);
 
-        // Attach ore logic (health/respawn/mining interaction)
-        if (normalizedType === 'copper-ore') {
+        if (type === 'copper-ore') {
           const ore = CopperOre.createFromMesh(inst, tx, tz);
-          // Propagate ore reference to all child meshes so ray hits can find it
           inst.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = ore; });
         }
       }
