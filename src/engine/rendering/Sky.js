@@ -18,14 +18,15 @@ export default class SkySystem {
     sky.scale.setScalar(450000);
     scene.add(sky);
 
+    // Keep your low sun position but brighten exposure a bit
     this.params = {
       turbidity: 7.0,
-      rayleigh: 1.672,
+      rayleigh: 1.6,
       mieCoefficient: 0.004,
-      mieDirectionalG: 0.584,
-      elevation: 0.8,
+      mieDirectionalG: 0.58,
+      elevation: 0.8,     // keep your “low sun” placement
       azimuth: 180.0,
-      exposure: 0.55
+      exposure: 1.08      // ✅ brighter overall response
     };
 
     this.sky = sky;
@@ -38,41 +39,19 @@ export default class SkySystem {
     const { turbidity, rayleigh, mieCoefficient, mieDirectionalG, elevation, azimuth, exposure } = this.params;
 
     const u = this.sky.material.uniforms;
-    u.turbidity.value       = turbidity;
-    u.rayleigh.value        = rayleigh;
-    u.mieCoefficient.value  = mieCoefficient;
-    u.mieDirectionalG.value = mieDirectionalG;
+    u['turbidity'].value = turbidity;
+    u['rayleigh'].value = rayleigh;
+    u['mieCoefficient'].value = mieCoefficient;
+    u['mieDirectionalG'].value = mieDirectionalG;
 
     const phi   = THREE.MathUtils.degToRad(90 - elevation);
     const theta = THREE.MathUtils.degToRad(azimuth);
     this.sun.setFromSphericalCoords(1, phi, theta);
-    u.sunPosition.value.copy(this.sun);
+    u['sunPosition'].value.copy(this.sun);
 
+    // ✅ renderer exposure (Viewport sets toneMapping already)
     const renderer = Viewport.instance?.renderer;
-    if (renderer) {
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = exposure;
-    }
-
-    // ✅ Blue top gradient overlay
-    const TOP  = new THREE.Color(0x73b7ff); // blue zenith
-    const BOT  = new THREE.Color(0xffd1a3); // warm horizon
-    this.sky.material.onBeforeCompile = (shader) => {
-      shader.uniforms.topColor    = { value: TOP };
-      shader.uniforms.bottomColor = { value: BOT };
-      shader.uniforms.mixStrength = { value: 0.75 };
-
-      shader.fragmentShader = shader.fragmentShader.replace(
-        'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
-        `
-          float h = clamp(normalize(vWorldPosition).y, 0.0, 1.0);
-          vec3 grad = mix(bottomColor, topColor, smoothstep(0.0, 1.0, h));
-          vec3 blended = mix(outgoingLight, grad, mixStrength);
-          gl_FragColor = vec4(blended, diffuseColor.a);
-        `
-      );
-    };
-    this.sky.material.needsUpdate = true;
+    if (renderer) renderer.toneMappingExposure = exposure;
 
     window.dispatchEvent(new CustomEvent('sky:updated', {
       detail: { sunDir: this.getSunDirection().clone(), elevation, azimuth }
@@ -80,4 +59,13 @@ export default class SkySystem {
   }
 
   getSunDirection() { return this.sun.clone().normalize(); }
+
+  colorForElevation() {
+    // warm at horizon -> neutral high
+    const elev = Math.max(0, Math.min(15, this.params.elevation));
+    const t = elev / 15;
+    const warm = new THREE.Color(0xFFD2A6);
+    const neutral = new THREE.Color(0xFFFFFF);
+    return warm.lerp(neutral, t);
+  }
 }
