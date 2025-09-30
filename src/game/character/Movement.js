@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import UpdateBus from '../../engine/core/UpdateBus.js';
 import Character from './Character.js';
 import CharacterAnimator from './CharacterAnimator.js';
-import VirtualJoystick from '../../engine/input/VirtualJoystick.js';
 import Camera from '../../engine/rendering/Camera.js';
+import Pathfinding from '../../engine/lib/Pathfinding.js';
 import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from '../world/WorldMap.js';
 
 export default class Movement {
@@ -12,20 +12,40 @@ export default class Movement {
   static create() { if (!Movement.main) Movement.main = new Movement(); }
 
   constructor() {
-    VirtualJoystick.create();
-    this.joy = VirtualJoystick.instance;
+    // Pathfinding & path state
+    this.pf = new Pathfinding();
+    this.path = [];
+    this.pathIndex = 0;
 
-    // Movement & turning
-    this.speed        = 2.5;  // world units per second
-    this.turnLerp     = 10.0; // higher = snappier character facing
-    this.characterYaw = 0;
+    // Movement tuning
+    this.speed = 2.5;        // units/sec
+    this.arriveEps = 0.03;   // when we consider a point reached
+    this.turnLerp = 12.0;
 
-    // World bounds (same as terrain)
+    // Bounds (match terrain)
     this.halfX = (WORLD_WIDTH * TILE_SIZE) * 0.5;
     this.halfZ = (WORLD_DEPTH * TILE_SIZE) * 0.5;
 
+    // Listen for taps on ground (from CameraTouchControls -> GroundPicker)
+    window.addEventListener('ground:tap', this.onGroundTap);
+
+    // Per-frame update
     this._unsub = UpdateBus.on((dt) => this.update(dt));
   }
+
+  onGroundTap = (ev) => {
+    const hit = ev?.detail?.point;
+    const ch = Character.instance?.object3D;
+    if (!hit || !ch) return;
+
+    const path = this.pf.findPath(ch.position, hit);
+    if (path && path.length > 0) {
+      this.path = path;
+      this.pathIndex = 0;
+      // start walk loop immediately
+      CharacterAnimator.main?.playWalk?.();
+    }
+  };
 
   update(dt) {
     const ch        = Character.instance?.object3D;
@@ -33,61 +53,50 @@ export default class Movement {
     const modelRoot = animator?.modelRoot;
     if (!ch || !animator || !modelRoot) return;
 
-    // Update animations
-    animator.update(dt);
+    // If we have a path, step toward current waypoint
+    if (this.path && this.pathIndex < this.path.length) {
+      const target = this.path[this.pathIndex];
+      const to = new THREE.Vector3().subVectors(target, ch.position); to.y = 0;
+      const dist = to.length();
 
-    // Joystick vector: x = right+, y = up+ (already normalized to -1..1)
-    const v = this.joy?.getVector() || { x: 0, y: 0 };
-    const mag = Math.hypot(v.x, v.y);
-    const moving = mag > 0.08; // deadzone
+      if (dist < this.arriveEps) {
+        // reached this waypoint
+        this.pathIndex++;
+        if (this.pathIndex >= this.path.length) {
+          // arrived at final
+          this.path = [];
+          this.pathIndex = 0;
+          animator.stopAll();
+          return;
+        }
+      } else if (dist > 0) {
+        // rotate toward and move
+        to.normalize();
+        const targetYaw = Math.atan2(to.x, to.z);
+        const currentYaw = modelRoot.rotation.y || 0;
+        const nextYaw = this._lerpAngle(currentYaw, targetYaw, Math.min(1, this.turnLerp * dt));
+        modelRoot.rotation.set(0, nextYaw, 0);
 
-    if (moving) {
-      // --- Camera-relative movement (stick UP = move away from camera) ---
-      const cam = Camera.main?.threeCamera || Camera.main;
+        const step = Math.min(dist, this.speed * dt);
+        ch.position.addScaledVector(to, step);
 
-      // Camera forward in world (points toward what the camera looks at)
-      const camForward = new THREE.Vector3();
-      cam?.getWorldDirection?.(camForward);
-      camForward.y = 0;
-      if (camForward.lengthSq() < 1e-6) camForward.set(0, 0, -1); // fallback
-      camForward.normalize();
-
-      // Camera right on XZ plane
-      const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
-
-      // Compose desired direction on ground:
-      //  - Use camRight for stick X
-      //  - Use **-camForward** for stick Y so pushing UP moves away from the camera
-      const desiredDir = new THREE.Vector3()
-        .addScaledVector(camRight, v.x)
-        .addScaledVector(camForward, -v.y);
-
-      if (desiredDir.lengthSq() > 1e-6) {
-        desiredDir.normalize();
-
-        // Always rotate toward desired direction (forward and back behave the same).
-        const targetYaw = Math.atan2(desiredDir.x, desiredDir.z);
-        this.characterYaw = this._lerpAngle(this.characterYaw, targetYaw, Math.min(1, this.turnLerp * dt));
-        modelRoot.rotation.set(0, this.characterYaw, 0);
-
-        // Move in desired direction scaled by stick magnitude
-        ch.position.addScaledVector(desiredDir, this.speed * mag * dt);
-
-        // Clamp inside terrain bounds
+        // Clamp inside world
         ch.position.x = THREE.MathUtils.clamp(ch.position.x, -this.halfX, this.halfX);
         ch.position.z = THREE.MathUtils.clamp(ch.position.z, -this.halfZ, this.halfZ);
 
-        // Ensure walking loops while moving
+        // keep walk looping while moving
         animator.playWalk();
       }
     } else {
-      // Idle
+      // No path -> idle
       animator.stopAll();
     }
 
-    // Camera lazy follow + update
-    Camera.main?.followUpdate?.(dt, this.characterYaw, moving);
+    // Camera is UNLOCKED (no auto-follow). Still update its matrix each frame.
     Camera.main?.update?.();
+
+    // Advance animation mixer
+    animator.update(dt);
   }
 
   _lerpAngle(a, b, t) {
