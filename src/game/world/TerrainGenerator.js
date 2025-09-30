@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from './WorldMap.js';
 
-/* ---------- Perlin-style noise (from your desert example, trimmed) ---------- */
+/* ---------- Lightweight Perlin ---------- */
 class PerlinNoise {
   constructor(seed = Math.random()) {
     this.seed = seed;
@@ -45,27 +45,23 @@ class PerlinNoise {
   }
 }
 
-/* ----------------------- Procedural map generators ------------------------ */
-function createGravelNormalMap(noiseA, noiseB, repeat = 10) {
+/* ----------------------- Procedural maps ------------------------ */
+function createGravelNormalMap(noiseA, noiseB, repeat = 9) {
   const size = 512;
   const data = new Uint8Array(size * size * 4);
-
-  // strength tuned for visible “gravel grooves”
-  const strength = 38;
+  const strength = 34; // slightly softer so sunlight/shadows read better
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const nx = x / size, ny = y / size;
 
-      // multi-scale noise: soft ripples + micro grit
       const h1 = noiseA.noise(nx * 14, ny * 14) * 0.8;
       const h2 = noiseA.noise(nx * 28, ny * 28) * 0.4;
       const h3 = noiseB.noise(nx * 95, ny * 95) * 0.15;
-      const h  = h1 + h2 + h3;
 
-      // sample neighbors for gradient
-      const nxL = ((x>0?x-1:x)   ) / size, nxR = ((x<size-1?x+1:x))/size;
-      const nyU = ((y>0?y-1:y)   ) / size, nyD = ((y<size-1?y+1:y))/size;
+      const nxL = ((x>0?x-1:x)) / size, nxR = ((x<size-1?x+1:x)) / size;
+      const nyU = ((y>0?y-1:y)) / size, nyD = ((y<size-1?y+1:y)) / size;
+
       const hL = noiseA.noise(nxL*14, ny*14)*0.8 + noiseA.noise(nxL*28, ny*28)*0.4 + noiseB.noise(nxL*95, ny*95)*0.15;
       const hR = noiseA.noise(nxR*14, ny*14)*0.8 + noiseA.noise(nxR*28, ny*28)*0.4 + noiseB.noise(nxR*95, ny*95)*0.15;
       const hU = noiseA.noise(nx*14, nyU*14)*0.8 + noiseA.noise(nx*28, nyU*28)*0.4 + noiseB.noise(nx*95, nyU*95)*0.15;
@@ -75,9 +71,9 @@ function createGravelNormalMap(noiseA, noiseB, repeat = 10) {
       const dy = (hD - hU);
 
       const i = (y * size + x) * 4;
-      data[i + 0] = 128 + Math.max(-127, Math.min(127, strength * dx)); // X
-      data[i + 1] = 128 + Math.max(-127, Math.min(127, strength * dy)); // Y
-      data[i + 2] = 255;                                                // Z
+      data[i + 0] = 128 + Math.max(-127, Math.min(127, strength * dx));
+      data[i + 1] = 128 + Math.max(-127, Math.min(127, strength * dy));
+      data[i + 2] = 255;
       data[i + 3] = 255;
     }
   }
@@ -89,14 +85,13 @@ function createGravelNormalMap(noiseA, noiseB, repeat = 10) {
   return tex;
 }
 
-function createGravelRoughnessMap(noise, repeat = 12) {
+function createGravelRoughnessMap(noise, repeat = 11) {
   const size = 256;
   const data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const nx = x / size, ny = y / size;
-      // higher where pits exist (rougher), slightly lower on crests
-      const r = 0.88 + 0.12 * noise.noise(nx * 40, ny * 40);
+      const r = 0.86 + 0.12 * noise.noise(nx * 40, ny * 40); // slightly less rough so shadows show
       const v = Math.max(0, Math.min(255, Math.floor(r * 255)));
       const i = (y * size + x) * 4;
       data[i+0] = v; data[i+1] = v; data[i+2] = v; data[i+3] = 255;
@@ -115,39 +110,31 @@ export default class TerrainGenerator {
     const width = WORLD_WIDTH * TILE_SIZE;
     const depth = WORLD_DEPTH * TILE_SIZE;
 
-    // More vertices so bumps look good & raycasting is precise on each tile
+    // Higher tessellation = smoother displacement and nicer contact shadows
     const segX = WORLD_WIDTH * 2;
     const segZ = WORLD_DEPTH * 2;
     const geometry = new THREE.PlaneGeometry(width, depth, segX, segZ);
     geometry.rotateX(-Math.PI / 2);
 
-    // multi-octave displacement (more pronounced than before, still walkable)
+    // Multi-octave displacement (kept mild for walking)
     const pos = geometry.attributes.position;
     const n1 = new PerlinNoise(Math.random());
     const n2 = new PerlinNoise(Math.random() + 1234);
 
-    // amplitude in meters (keep modest so the flat-movement avatar doesn’t clip hard)
-    const A1 = 0.12;   // base undulation
-    const A2 = 0.07;   // mid bumps
-    const A3 = 0.03;   // micro grit
-    // frequency in cycles across the whole map
-    const F1 = 1.2;
-    const F2 = 4.0;
-    const F3 = 14.0;
+    const A1 = 0.12, A2 = 0.07, A3 = 0.03;
+    const F1 = 1.2,  F2 = 4.0,  F3 = 14.0;
 
-    // vertex colours (gravel palette)
+    // Slightly lighter palette so shadows pop
     const colors = new Float32Array(pos.count * 3);
-    const cA = new THREE.Color(0x5b5b5b); // deep pit grey
-    const cB = new THREE.Color(0x6f6a64); // warm taupe
-    const cC = new THREE.Color(0x7b7b7b); // mid granite
-    const cD = new THREE.Color(0x8a8078); // dusty brown tint
-    const cE = new THREE.Color(0x949494); // light speckle
+    const cA = new THREE.Color(0x6f6f6f);
+    const cB = new THREE.Color(0x80786f);
+    const cC = new THREE.Color(0x8b8b8b);
+    const cD = new THREE.Color(0x9a8f84);
+    const cE = new THREE.Color(0xa7a7a7);
 
-    // do displacement & colour
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i) + width * 0.5;  // map to [0..width]
-      const z = pos.getZ(i) + depth * 0.5;  // map to [0..depth]
-
+      const x = pos.getX(i) + width * 0.5;
+      const z = pos.getZ(i) + depth * 0.5;
       const u = x / width, v = z / depth;
 
       const h =
@@ -157,7 +144,6 @@ export default class TerrainGenerator {
 
       pos.setY(i, h);
 
-      // colour blend: base by low freq, detail by high freq
       const tLo = THREE.MathUtils.clamp(0.5 + 0.5 * n1.noise(u * F1, v * F1), 0, 1);
       const tHi = THREE.MathUtils.clamp(0.5 + 0.5 * n2.noise(u * F3, v * F3), 0, 1);
 
@@ -176,25 +162,27 @@ export default class TerrainGenerator {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
 
-    // procedural texture maps
+    // Textures
     const normalMap    = createGravelNormalMap(new PerlinNoise(Math.random()+42), new PerlinNoise(Math.random()+77), 9);
     const roughnessMap = createGravelRoughnessMap(new PerlinNoise(Math.random()+99), 11);
 
     const material = new THREE.MeshStandardMaterial({
       vertexColors: true,
       metalness: 0.0,
-      roughness: 0.92,      // base; roughnessMap modulates this
+      roughness: 0.88,         // slightly less rough so sunlight & shadow contrast read well
       roughnessMap,
       normalMap,
-      normalScale: new THREE.Vector2(1.0, 1.0)
+      normalScale: new THREE.Vector2(0.8, 0.8) // a hair softer to avoid noisy shading
     });
 
     const groundMesh = new THREE.Mesh(geometry, material);
     groundMesh.name = 'ProceduralGround';
+
+    // ✅ Make sure terrain participates in shadowing
     groundMesh.castShadow = false;
     groundMesh.receiveShadow = true;
 
-    // align world so tile (0,0) starts at (0,0)
+    // Align world so tile (0,0) starts at (0,0)
     groundMesh.position.set(width / 2, 0, depth / 2);
 
     return groundMesh;
