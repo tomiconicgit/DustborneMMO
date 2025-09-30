@@ -33,6 +33,9 @@ const paths = {
   // Audio & Dev
   soundManager:     mod('engine/audio/SoundManager.js'),
   devGrid:          mod('game/dev/GridToggle.js'),
+
+  // UI
+  inventoryUI:      mod('ui/inventory.js'),   // ← NEW
 };
 
 export default paths;
