@@ -35,7 +35,10 @@ export default class EngineSetup {
       { name: 'SoundManager',         path: paths.soundManager },
 
       // UI
-      { name: 'InventoryUI',          path: paths.inventoryUI }, // ← NEW
+      { name: 'InventoryUI',          path: paths.inventoryUI },
+
+      // NEW: draw a clean copper chunk icon once at boot
+      { name: 'ItemIcons',            path: paths.itemIcons },
     ];
   }
 }
