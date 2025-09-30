@@ -126,8 +126,9 @@ export default class ChunkManager {
         // Attach ore logic (health/respawn/mining interaction)
         if (type === 'ore-copper') {
           const ore = CopperOre.createFromMesh(inst, tx, tz);
-          // make discovery easy from ray hits
-          inst.userData.ore = ore;
+
+          // Propagate ore reference to all child meshes so ray hits can find it
+          inst.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = ore; });
         }
       }
     }
