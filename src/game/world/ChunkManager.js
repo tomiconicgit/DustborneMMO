@@ -52,16 +52,25 @@ export default class ChunkManager {
     const loader = new GLTFLoader();
     const protoCache = new Map();
 
-    const getPrototype = async (type) => {
+    // Normalize type aliases (accept both 'copper-ore' and 'ore-copper')
+    const normalizeType = (t) => {
+      if (!t) return t;
+      const s = String(t).toLowerCase();
+      if (s === 'copper-ore' || s === 'ore-copper') return 'copper-ore';
+      return s;
+    };
+
+    const getPrototype = async (typeRaw) => {
+      const type = normalizeType(typeRaw);
       if (protoCache.has(type)) return protoCache.get(type);
 
       let url = null;
       switch (type) {
-        case 'ore-copper':
+        case 'copper-ore':
           url = new URL('../../assets/models/rocks/copper-ore.glb', import.meta.url).href;
           break;
         default:
-          Debugger.warn(`Unknown static object type: ${type}`);
+          Debugger.warn(`Unknown static object type: ${typeRaw}`);
           return null;
       }
 
@@ -97,14 +106,14 @@ export default class ChunkManager {
 
       for (let i = 0; i < list.length; i++) {
         const spec = list[i] || {};
-        const type = spec.type;
-        if (!type) continue;
+        const normalizedType = normalizeType(spec.type);
+        if (!normalizedType) continue;
 
-        const proto = await getPrototype(type);
+        const proto = await getPrototype(normalizedType);
         if (!proto) continue;
 
         const inst = proto.clone(true);
-        inst.name = `${type}-${tx}-${tz}-${i}`;
+        inst.name = `${normalizedType}-${tx}-${tz}-${i}`;
 
         // Place at the tile center; keep the model's baked Y (inst.position.y)
         const worldX = (tx + 0.5) * TILE_SIZE;
@@ -124,9 +133,8 @@ export default class ChunkManager {
         }
 
         // Attach ore logic (health/respawn/mining interaction)
-        if (type === 'ore-copper') {
+        if (normalizedType === 'copper-ore') {
           const ore = CopperOre.createFromMesh(inst, tx, tz);
-
           // Propagate ore reference to all child meshes so ray hits can find it
           inst.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = ore; });
         }
