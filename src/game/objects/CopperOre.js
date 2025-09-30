@@ -89,7 +89,7 @@ export default class CopperOre {
     // Play mining animation loop (if available), else just stay idle
     CharacterAnimator.main?.playMining?.();
 
-    // Reset tick
+    // Reset cadence timer
     this._mineClock = 0;
   }
 
@@ -101,7 +101,7 @@ export default class CopperOre {
       return;
     }
 
-    // If mining anim is active, apply timed hits (or if mining anim missing, we could still tick—optional)
+    // If mining anim is active, apply timed hits
     if (CharacterAnimator.main?.active === 'mining') {
       this._mineClock += dt;
       if (this._mineClock >= 2.0) { // one hit every ~2s
@@ -124,8 +124,9 @@ export default class CopperOre {
     if (this.health <= 0) {
       this._deplete();
     } else {
-      // Restart loop cleanly each time an ore is collected
-      CharacterAnimator.main?.playMining?.();
+      // Restart both the animation **and** the cadence timer, continue mining
+      this._mineClock = 0;
+      CharacterAnimator.main?.restartMiningLoop?.();
     }
   }
 
