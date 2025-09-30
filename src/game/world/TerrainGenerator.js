@@ -1,137 +1,39 @@
 // file: src/game/world/TerrainGenerator.js
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { WORLD_WIDTH, WORLD_DEPTH, TILE_SIZE } from './WorldMap.js';
 
-/* ---------- tiny noise helpers kept from before (for the floor material) ---------- */
-class PerlinNoise {
-  constructor(seed = Math.random()) {
-    this.seed = seed;
-    this.perm = new Array(512);
-    this.gradP = new Array(512);
-    const p = new Array(256);
-    for (let i = 0; i < 256; i++) p[i] = (Math.floor(seed * 10000 + i) % 256);
-    for (let i = 0; i < 512; i++) {
-      this.perm[i] = p[i & 255];
-      this.gradP[i] = this.gradients[this.perm[i] % 12];
-    }
+/** Tiny, fast hash-noise for subtle undulations (deterministic). */
+class TinyNoise {
+  constructor(seed = 1337) {
+    this.seed = seed >>> 0;
   }
-  gradients = [
-    [1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0],
-    [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1],
-    [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]
-  ];
-  fade(t){ return t*t*t*(t*(t*6-15)+10); }
-  lerp(a,b,t){ return a + (b-a)*t; }
-  grad(g,x,y,z){ return g[0]*x + g[1]*y + g[2]*z; }
-  noise(x,y,z=0){
-    const X=Math.floor(x)&255, Y=Math.floor(y)&255, Z=Math.floor(z)&255;
-    x-=Math.floor(x); y-=Math.floor(y); z-=Math.floor(z);
-    const u=this.fade(x), v=this.fade(y), w=this.fade(z);
-    const A=this.perm[X]+Y, AA=this.perm[A]+Z, AB=this.perm[A+1]+Z;
-    const B=this.perm[X+1]+Y, BA=this.perm[B]+Z, BB=this.perm[B+1]+Z;
-    return this.lerp(
-      this.lerp(
-        this.lerp(this.grad(this.gradP[AA], x,   y,   z), this.grad(this.gradP[BA], x-1, y,   z), u),
-        this.lerp(this.grad(this.gradP[AB], x,   y-1, z), this.grad(this.gradP[BB], x-1, y-1, z), u),
-        v
-      ),
-      this.lerp(
-        this.lerp(this.grad(this.gradP[AA+1], x,   y,   z-1), this.grad(this.gradP[BA+1], x-1, y,   z-1), u),
-        this.lerp(this.grad(this.gradP[AB+1], x,   y-1, z-1), this.grad(this.gradP[BB+1], x-1, y-1, z-1), u),
-        v
-      ),
-      w
-    );
+  _hash(x, z) {
+    // 32-bit integer hash
+    let h = (x * 374761393) ^ (z * 668265263) ^ this.seed;
+    h = (h ^ (h >>> 13)) >>> 0;
+    h = (h * 1274126177) >>> 0;
+    return h;
   }
-}
-
-function createGravelNormalMap(noiseA, noiseB, repeat = 10) {
-  const size = 512;
-  const data = new Uint8Array(size * size * 4);
-  const strength = 38;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const nx = x / size, ny = y / size;
-      const h1 = noiseA.noise(nx * 14, ny * 14) * 0.8;
-      const h2 = noiseA.noise(nx * 28, ny * 28) * 0.4;
-      const nxL=((x>0?x-1:x))/size, nxR=((x<size-1?x+1:x))/size;
-      const nyU=((y>0?y-1:y))/size, nyD=((y<size-1?y+1:y))/size;
-      const hL = noiseA.noise(nxL*14, ny*14)*0.8 + noiseA.noise(nxL*28, ny*28)*0.4 + noiseB.noise(nxL*95, ny*95)*0.15;
-      const hR = noiseA.noise(nxR*14, ny*14)*0.8 + noiseA.noise(nxR*28, ny*28)*0.4 + noiseB.noise(nxR*95, ny*95)*0.15;
-      const hU = noiseA.noise(nx*14, nyU*14)*0.8 + noiseA.noise(nx*28, nyU*28)*0.4 + noiseB.noise(nx*95, nyU*95)*0.15;
-      const hD = noiseA.noise(nx*14, nyD*14)*0.8 + noiseA.noise(nx*28, nyD*28)*0.4 + noiseB.noise(nx*95, nyD*95)*0.15;
-      const dx = (hR - hL), dy = (hD - hU);
-      const i = (y * size + x) * 4;
-      data[i+0]=128+Math.max(-127,Math.min(127,strength*dx));
-      data[i+1]=128+Math.max(-127,Math.min(127,strength*dy));
-      data[i+2]=255; data[i+3]=255;
-    }
+  // Returns in [-1, 1]
+  rand01(x, z) {
+    const h = this._hash(x, z);
+    return (h / 0xffffffff) * 2 - 1;
   }
-  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeat, repeat);
-  tex.needsUpdate = true;
-  return tex;
-}
-function createGravelRoughnessMap(noise, repeat = 12) {
-  const size = 256;
-  const data = new Uint8Array(size * size * 4);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const nx = x / size, ny = y / size;
-      const r = 0.88 + 0.12 * noise.noise(nx * 40, ny * 40);
-      const v = Math.max(0, Math.min(255, Math.floor(r * 255)));
-      const i = (y * size + x) * 4;
-      data[i]=v; data[i+1]=v; data[i+2]=v; data[i+3]=255;
-    }
+  // Simple bilinear interpolation over integer grid
+  noise(x, z) {
+    const x0 = Math.floor(x), z0 = Math.floor(z);
+    const x1 = x0 + 1,       z1 = z0 + 1;
+    const tx = x - x0,       tz = z - z0;
+
+    const n00 = this.rand01(x0, z0);
+    const n10 = this.rand01(x1, z0);
+    const n01 = this.rand01(x0, z1);
+    const n11 = this.rand01(x1, z1);
+
+    const nx0 = n00 * (1 - tx) + n10 * tx;
+    const nx1 = n01 * (1 - tx) + n11 * tx;
+    return nx0 * (1 - tz) + nx1 * tz;
   }
-  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeat, repeat);
-  tex.needsUpdate = true;
-  return tex;
-}
-
-/** Load and fit the authored mining area into 30×30. */
-async function loadAndFitMiningArea(intoGroup) {
-  const url = new URL('../../assets/models/terrain/mining-area.glb', import.meta.url).href;
-  const gltf = await new GLTFLoader().loadAsync(url);
-  const model = gltf.scene || gltf.scenes?.[0];
-  if (!model) return;
-
-  model.traverse(o => {
-    if (o.isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-      if (o.material && 'metalness' in o.material) {
-        o.material.metalness = Math.min(0.2, o.material.metalness ?? 0);
-        o.material.roughness = Math.max(0.7, o.material.roughness ?? 0.7);
-      }
-    }
-  });
-
-  // Fit & center
-  const box = new THREE.Box3().setFromObject(model);
-  const size = new THREE.Vector3(); box.getSize(size);
-  const widthTarget = WORLD_WIDTH * TILE_SIZE;
-  const depthTarget = WORLD_DEPTH * TILE_SIZE;
-  const s = Math.min(widthTarget / size.x, depthTarget / size.z);
-  model.scale.setScalar(s);
-
-  const scaled = new THREE.Box3().setFromObject(model);
-  const min = scaled.min.clone();
-  const center = new THREE.Vector3(); scaled.getCenter(center);
-
-  const targetCenter = new THREE.Vector3(widthTarget * 0.5, 0, depthTarget * 0.5);
-  const offset = new THREE.Vector3(
-    targetCenter.x - center.x,
-    -min.y + 0.0, // sit on y=0
-    targetCenter.z - center.z
-  );
-  model.position.add(offset);
-
-  intoGroup.add(model);
 }
 
 export default class TerrainGenerator {
@@ -139,37 +41,48 @@ export default class TerrainGenerator {
     const width = WORLD_WIDTH * TILE_SIZE;
     const depth = WORLD_DEPTH * TILE_SIZE;
 
-    // Root that carries ground + the authored model
-    const root = new THREE.Group();
-    root.name = 'TerrainRoot';
+    // Low-poly desert look: fewer segments to keep faceting subtle.
+    const segX = Math.max(10, Math.floor(WORLD_WIDTH * 0.8));
+    const segZ = Math.max(10, Math.floor(WORLD_DEPTH * 0.8));
+    const geometry = new THREE.PlaneGeometry(width, depth, segX, segZ);
+    geometry.rotateX(-Math.PI / 2);
 
-    // --- VISIBLE procedural floor covering 30×30 (slightly below y=0 to avoid z-fight with GLB) ---
-    const segX = WORLD_WIDTH * 2, segZ = WORLD_DEPTH * 2;
-    const g = new THREE.PlaneGeometry(width, depth, segX, segZ);
-    g.rotateX(-Math.PI / 2);
+    // Subtle bumps (keep very gentle, desert-flat)
+    const pos = geometry.attributes.position;
+    const noise = new TinyNoise(20250101);
+    const amp = 0.05; // meters; very slight
+    const freq = 1.5; // low frequency over the board
 
-    const normalMap    = createGravelNormalMap(new PerlinNoise(42.123), new PerlinNoise(77.456), 9);
-    const roughnessMap = createGravelRoughnessMap(new PerlinNoise(99.789), 11);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i) + width * 0.5;   // map to [0..width]
+      const z = pos.getZ(i) + depth * 0.5;   // map to [0..depth]
+      const u = x / width;
+      const v = z / depth;
 
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x7a6d66,
+      const h =
+        amp * (0.65 * noise.noise(u * freq, v * freq) +
+               0.35 * noise.noise(u * (freq * 0.5), v * (freq * 0.5)));
+
+      pos.setY(i, h);
+    }
+
+    geometry.computeVertexNormals();
+
+    // Plain beige, no vertex colors or textures (clean desert look)
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xD9C49C,   // beige desert
       metalness: 0.0,
-      roughness: 0.92,
-      roughnessMap,
-      normalMap,
-      normalScale: new THREE.Vector2(1.0, 1.0)
+      roughness: 0.85
     });
 
-    const ground = new THREE.Mesh(g, mat);
-    ground.name = 'ProceduralGround';
-    ground.castShadow = false;
-    ground.receiveShadow = true;
-    ground.position.set(width / 2, -0.01, depth / 2); // tiny drop avoids z-fighting
-    root.add(ground);
+    const groundMesh = new THREE.Mesh(geometry, material);
+    groundMesh.name = 'ProceduralGround';
+    groundMesh.castShadow = false;
+    groundMesh.receiveShadow = true;
 
-    // --- Authored cliffs / props (async) ---
-    loadAndFitMiningArea(root).catch(e => console.warn('[Terrain] mining-area.glb load failed:', e));
+    // Align world so tile (0,0) starts at (0,0)
+    groundMesh.position.set(width / 2, 0, depth / 2);
 
-    return root;
-  }
+    return groundMesh;
+    }
 }
