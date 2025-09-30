@@ -1,8 +1,9 @@
 // file: src/engine/input/CameraTouchControls.js
-// Orbit rotate (1 finger drag) + pinch/scroll zoom.
-// Proper two-pointer tracking to avoid jumpy zoom deltas.
+// One-finger drag = orbit rotate, two-finger pinch = zoom,
+// light tap = pick ground & dispatch 'ground:tap'.
 import Camera from '../rendering/Camera.js';
 import Viewport from '../core/Viewport.js';
+import GroundPicker from './GroundPicker.js';
 
 export default class CameraTouchControls {
   static create() { new CameraTouchControls(); }
@@ -10,19 +11,26 @@ export default class CameraTouchControls {
   constructor() {
     this.cam = Camera.main;
     this.canvas = Viewport.instance?.renderer?.domElement || window;
-
     if (this.canvas.style) this.canvas.style.touchAction = 'none';
+
+    GroundPicker.create();
+
+    // Tap detection
+    this.tapMaxMs = 260;
+    this.tapMaxMove = 10;
 
     // Pointer tracking
     this.primaryId = null;
-    this.lastX = 0;
-    this.lastY = 0;
+    this.startX = this.startY = 0;
+    this.lastX = this.lastY = 0;
+    this.startTime = 0;
+    this.moved = false;
 
-    // Store active pointers { id: {x,y} }
+    // Multi-touch for pinch
     this.points = new Map();
     this.lastPinchDist = null;
 
-    // Bind events
+    // Events
     this.canvas.addEventListener('pointerdown', this.onDown, { passive: false });
     this.canvas.addEventListener('pointermove', this.onMove,  { passive: false });
     this.canvas.addEventListener('pointerup',   this.onUp,    { passive: false });
@@ -35,12 +43,13 @@ export default class CameraTouchControls {
 
     if (this.primaryId === null) {
       this.primaryId = e.pointerId;
-      this.lastX = e.clientX;
-      this.lastY = e.clientY;
+      this.startX = this.lastX = e.clientX;
+      this.startY = this.lastY = e.clientY;
+      this.startTime = performance.now();
+      this.moved = false;
       this.canvas.setPointerCapture?.(e.pointerId);
     }
 
-    // If two pointers now, seed pinch distance
     if (this.points.size === 2) {
       this.lastPinchDist = this._currentPinchDistance();
     }
@@ -51,7 +60,6 @@ export default class CameraTouchControls {
     this.points.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (this.points.size === 2) {
-      // Proper pinch: distance between the two active pointers
       e.preventDefault();
       const d = this._currentPinchDistance();
       if (this.lastPinchDist != null && isFinite(d)) {
@@ -62,11 +70,13 @@ export default class CameraTouchControls {
       return;
     }
 
-    // Single-finger orbit rotate
     if (e.pointerId === this.primaryId) {
       const dx = e.clientX - this.lastX;
-      const moved = Math.abs(dx) > 0;
-      if (moved) {
+      const dy = e.clientY - this.lastY;
+      const movedMag = Math.hypot(e.clientX - this.startX, e.clientY - this.startY);
+      if (movedMag > this.tapMaxMove) this.moved = true;
+
+      if (this.moved) {
         e.preventDefault();
         this._rotateBy(-dx * 0.01);
       }
@@ -76,24 +86,33 @@ export default class CameraTouchControls {
   };
 
   onUp = (e) => {
-    // Release pointer
-    if (e.pointerId === this.primaryId) {
+    const wasPrimary = e.pointerId === this.primaryId;
+
+    if (wasPrimary) {
+      const dt = performance.now() - this.startTime;
+      const movedMag = Math.hypot(this.lastX - this.startX, this.lastY - this.startY);
+      const wasTap = movedMag <= this.tapMaxMove && dt <= this.tapMaxMs;
+
+      if (wasTap) {
+        const point = GroundPicker.instance?.pick(e.clientX, e.clientY);
+        if (point) window.dispatchEvent(new CustomEvent('ground:tap', { detail: { point } }));
+      }
+
       this.canvas.releasePointerCapture?.(e.pointerId);
       this.primaryId = null;
+      this.moved = false;
     }
+
     this.points.delete(e.pointerId);
+    if (this.points.size < 2) this.lastPinchDist = null;
 
-    // Reset pinch state if fewer than 2 pointers
-    if (this.points.size < 2) {
-      this.lastPinchDist = null;
-    }
-
-    // Choose a new primary if one finger remains
-    if (this.primaryId === null && this.points.size === 1) {
+    if (!this.primaryId && this.points.size === 1) {
       const [id, pt] = this.points.entries().next().value;
       this.primaryId = id;
-      this.lastX = pt.x;
-      this.lastY = pt.y;
+      this.startX = this.lastX = pt.x;
+      this.startY = this.lastY = pt.y;
+      this.startTime = performance.now();
+      this.moved = false;
     }
   };
 
@@ -104,20 +123,13 @@ export default class CameraTouchControls {
     const it = this.points.values();
     const a = it.next().value;
     const b = it.next().value;
-    const dx = a.x - b.x, dy = a.y - b.y;
-    return Math.hypot(dx, dy);
-    }
-
-  _rotateBy(da) {
-    this.cam.orbitAngle += da;
-    this.cam.notifyUserRotated?.();
-    this.cam.update?.();
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
+  _rotateBy(da) { this.cam.orbitAngle += da; this.cam.update?.(); }
   _zoomBy(dz) {
     const c = this.cam;
     c.orbitDistance = Math.max(c.minDistance, Math.min(c.maxDistance, c.orbitDistance + dz));
-    this.cam.notifyUserRotated?.();
     this.cam.update?.();
   }
 }
