@@ -30,8 +30,8 @@ export default class CopperOre {
 
     this._mineClock = 0;
 
-    // Bind for ray hit
-    this.mesh.userData.ore = this;
+    // Make sure all child meshes can be recognized as this ore
+    this.mesh.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = this; });
 
     // Per-frame updates
     this._unsub = UpdateBus.on((dt) => this.update(dt));
@@ -43,12 +43,6 @@ export default class CopperOre {
     // Player target: nearest adjacent tile (4-way). Pick the closest of the four.
     const ch = Character.instance?.object3D;
     if (!ch) return;
-
-    const oreCenter = new THREE.Vector3(
-      (this.tileX + 0.5) * TILE_SIZE,
-      0,
-      (this.tileZ + 0.5) * TILE_SIZE
-    );
 
     const candidates = [
       { x: this.tileX + 1, z: this.tileZ     },
@@ -66,7 +60,7 @@ export default class CopperOre {
       const d = wp.distanceToSquared(ch.position);
       if (d < bestDist) { bestDist = d; best = { ...c, world: wp }; }
     }
-    const standPos = best?.world || oreCenter.clone().add(new THREE.Vector3(TILE_SIZE, 0, 0));
+    const standPos = best?.world || new THREE.Vector3((this.tileX + 1.5) * TILE_SIZE, 0, (this.tileZ + 0.5) * TILE_SIZE);
 
     // Walk there, then start mining
     Movement.main?.walkTo(standPos, () => this._beginMining());
@@ -87,11 +81,13 @@ export default class CopperOre {
     );
     const dir = new THREE.Vector3().subVectors(orePos, ch.position);
     dir.y = 0;
-    const yaw = Math.atan2(dir.x, dir.z);
-    modelRoot.rotation.set(0, yaw, 0);
+    if (dir.lengthSq() > 1e-6) {
+      const yaw = Math.atan2(dir.x, dir.z);
+      modelRoot.rotation.set(0, yaw, 0);
+    }
 
-    // Play mining animation loop
-    CharacterAnimator.main?.playMining();
+    // Play mining animation loop (if available), else just stay idle
+    CharacterAnimator.main?.playMining?.();
 
     // Reset tick
     this._mineClock = 0;
@@ -105,7 +101,7 @@ export default class CopperOre {
       return;
     }
 
-    // If mining anim is active, apply timed hits
+    // If mining anim is active, apply timed hits (or if mining anim missing, we could still tick—optional)
     if (CharacterAnimator.main?.active === 'mining') {
       this._mineClock += dt;
       if (this._mineClock >= 2.0) { // one hit every ~2s
@@ -129,7 +125,7 @@ export default class CopperOre {
       this._deplete();
     } else {
       // Restart loop cleanly each time an ore is collected
-      CharacterAnimator.main?.playMining();
+      CharacterAnimator.main?.playMining?.();
     }
   }
 
@@ -148,7 +144,7 @@ export default class CopperOre {
     this.mesh.visible = false;
     this.respawnTimer = this.respawnDelay;
     // Stop mining if we just depleted the node
-    CharacterAnimator.main?.playIdle();
+    CharacterAnimator.main?.playIdle?.();
   }
 
   _respawn() {
