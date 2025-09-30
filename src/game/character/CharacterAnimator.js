@@ -21,7 +21,7 @@ export default class CharacterAnimator {
     this.idleClip = null;
     this.idleAction = null;
 
-    // mining
+    // mining (optional)
     this.miningClip = null;
     this.miningAction = null;
 
@@ -67,8 +67,8 @@ export default class CharacterAnimator {
       }
     }
 
-    // Load mining animation
-    {
+    // Load mining animation (OPTIONAL – won’t break if missing)
+    try {
       const url = new URL('../../assets/models/character/anim-mining.glb', import.meta.url).href;
       const gltf = await loader.loadAsync(url);
       this.miningClip = gltf.animations?.[0] || null;
@@ -79,6 +79,10 @@ export default class CharacterAnimator {
         this.miningAction.enabled = true;
         this.miningAction.weight = 1.0;
       }
+    } catch (err) {
+      console.warn('[Animator] Mining animation missing/failed to load (continuing):', err?.message || err);
+      this.miningClip = null;
+      this.miningAction = null;
     }
 
     // Start with idle by default
@@ -104,7 +108,7 @@ export default class CharacterAnimator {
   }
 
   playMining() {
-    if (!this.miningAction) return;
+    if (!this.miningAction) return; // gracefully do nothing if optional anim missing
     if (this.active === 'mining') return;
     this._fadeTo(this.miningAction, 0.15);
     this.active = 'mining';
