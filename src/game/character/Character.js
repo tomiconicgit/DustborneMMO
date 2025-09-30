@@ -18,7 +18,7 @@ export default class Character {
     this.object3D = new THREE.Group();
     this.object3D.name = 'PlayerCharacter';
 
-    // Spawn within a tile near world center (tile center at 0.5 offsets)
+    // Spawn within a tile near world origin (tile center)
     const HALF_TILE = 0.5 * TILE_SIZE;
     this.object3D.position.set(HALF_TILE, 0, HALF_TILE);
 
@@ -56,11 +56,11 @@ export default class Character {
     this.object3D.add(model);
     scene.add(this.object3D);
 
-    // Cache world extents (if needed)
+    // Cache world extents (if needed later)
     this.halfX = (WORLD_WIDTH * TILE_SIZE) / 2;
     this.halfZ = (WORLD_DEPTH * TILE_SIZE) / 2;
 
-    // Attach pickaxe to RightHand bone (if present)
+    // Attach pickaxe to RightHand bone
     await this._attachPickaxe();
 
     // Let camera orbit this character
@@ -69,25 +69,28 @@ export default class Character {
 
   async _attachPickaxe() {
     try {
-      // Path you said you placed it at:
-      const toolURL = new URL('../../models/tools/wooden-pickaxe.glb', import.meta.url).href;
+      // ✅ correct asset path (you said the file is here)
+      const toolURL = new URL('../../assets/models/tools/wooden-pickaxe.glb', import.meta.url).href;
       const gltf = await new GLTFLoader().loadAsync(toolURL);
       const pickaxe = gltf.scene;
       pickaxe.name = 'WoodenPickaxe';
 
-      // Try common bone names; primary is "RightHand" as you noted.
-      const rightHand =
-        this.object3D.getObjectByName('RightHand') ||
-        this.object3D.getObjectByName('mixamorigRightHand') ||
-        this.object3D.getObjectByName('RightHandIndex1') || // last-ditch
-        null;
+      // Strictly use the RightHand bone name you provided
+      // Search inside the loaded character model root
+      const searchRoot = this.modelRoot || this.object3D;
+      const rightHand = searchRoot.getObjectByName('RightHand');
 
       if (!rightHand) {
-        console.warn('RightHand bone not found — pickaxe not attached.');
+        console.warn(
+          '[Character] RightHand bone not found on model — cannot attach pickaxe.'
+        );
         return;
       }
 
-      // Offsets from your old PWA (tweak if needed)
+      // Make sure the tool renders nicely
+      pickaxe.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+      // Pose offsets (from your old PWA numbers; tweak as needed)
       pickaxe.position.set(0.20, 0.40, 0.00);
       pickaxe.scale.set(0.161, 0.161, 0.176);
       pickaxe.rotation.set(
@@ -96,10 +99,18 @@ export default class Character {
         THREE.MathUtils.degToRad(0.0)
       );
 
+      // Parent to the bone so it follows all animations
       rightHand.add(pickaxe);
+
+      // Safety: ensure transforms keep updating with the bone’s animation
+      pickaxe.matrixAutoUpdate = true;
+
       this.pickaxe = pickaxe;
+      // Force one world-matrix update pass so initial transform is correct
+      rightHand.updateWorldMatrix(true, true);
+      pickaxe.updateMatrixWorld(true);
     } catch (err) {
-      console.warn('Failed to load/attach pickaxe:', err);
+      console.warn('[Character] Failed to load/attach pickaxe:', err);
     }
   }
 }
