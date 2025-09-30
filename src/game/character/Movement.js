@@ -16,16 +16,14 @@ export default class Movement {
     this.joy = VirtualJoystick.instance;
 
     // Movement & turning
-    this.speed      = 2.5;    // world units per second
-    this.turnLerp   = 10.0;   // higher = snappier character facing
-    this.epsilon    = 0.001;
+    this.speed        = 2.5;  // world units per second
+    this.turnLerp     = 10.0; // higher = snappier character facing
     this.characterYaw = 0;
 
     // World bounds (same as terrain)
     this.halfX = (WORLD_WIDTH * TILE_SIZE) * 0.5;
     this.halfZ = (WORLD_DEPTH * TILE_SIZE) * 0.5;
 
-    // Per-frame update
     this._unsub = UpdateBus.on((dt) => this.update(dt));
   }
 
@@ -35,65 +33,55 @@ export default class Movement {
     const modelRoot = animator?.modelRoot;
     if (!ch || !animator || !modelRoot) return;
 
-    // Animate (walk loop, etc.)
+    // Update animations
     animator.update(dt);
 
-    // --- Joystick vector (screen space): x = right+, y = up+ ---
+    // Joystick vector: x = right+, y = up+ (already normalized to -1..1)
     const v = this.joy?.getVector() || { x: 0, y: 0 };
     const mag = Math.hypot(v.x, v.y);
     const moving = mag > 0.08; // deadzone
 
-    // Build character basis vectors from current yaw
-    const fwd = new THREE.Vector3(Math.sin(this.characterYaw), 0, Math.cos(this.characterYaw)); // facing direction
-    const right = new THREE.Vector3(fwd.z, 0, -fwd.x); // 90° right of fwd
-
     if (moving) {
-      // --- Camera-relative desired direction ---
-      // Stick up should be "forward" relative to the camera.
-      // Start with stick -> world (x, -y) then rotate by camera yaw around Y.
+      // --- Camera-relative movement (stick UP = move away from camera) ---
       const cam = Camera.main?.threeCamera || Camera.main;
-      const camPos = cam?.position || new THREE.Vector3(0, 0, 1);
-      const toCam = new THREE.Vector3().subVectors(camPos, ch.position).setY(0).normalize();
-      const camYaw = Math.atan2(toCam.x, toCam.z) + Math.PI; // camera looking direction yaw
 
-      // Raw from stick: (x, y) => world XY as (x, 0, -y) then rotate by camYaw
-      const raw = new THREE.Vector3(v.x, 0, -v.y);
-      const rotY = new THREE.Matrix4().makeRotationY(camYaw);
-      const desiredDir = raw.applyMatrix4(rotY).normalize();
+      // Camera forward in world (points toward what the camera looks at)
+      const camForward = new THREE.Vector3();
+      cam?.getWorldDirection?.(camForward);
+      camForward.y = 0;
+      if (camForward.lengthSq() < 1e-6) camForward.set(0, 0, -1); // fallback
+      camForward.normalize();
 
-      // Decompose desiredDir in the character's local basis
-      const f = desiredDir.dot(fwd);   // forward component (positive = forward, negative = backward)
-      const s = desiredDir.dot(right); // side component (positive = right, negative = left)
+      // Camera right on XZ plane
+      const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
 
-      let moveVec = new THREE.Vector3();
+      // Compose desired direction on ground:
+      //  - Use camRight for stick X
+      //  - Use **-camForward** for stick Y so pushing UP moves away from the camera
+      const desiredDir = new THREE.Vector3()
+        .addScaledVector(camRight, v.x)
+        .addScaledVector(camForward, -v.y);
 
-      if (f >= 0) {
-        // FORWARD hemisphere: rotate toward desired and move in that direction
+      if (desiredDir.lengthSq() > 1e-6) {
+        desiredDir.normalize();
+
+        // Always rotate toward desired direction (forward and back behave the same).
         const targetYaw = Math.atan2(desiredDir.x, desiredDir.z);
         this.characterYaw = this._lerpAngle(this.characterYaw, targetYaw, Math.min(1, this.turnLerp * dt));
         modelRoot.rotation.set(0, this.characterYaw, 0);
 
-        moveVec.copy(desiredDir).multiplyScalar(this.speed * mag);
-      } else {
-        // BACKWARD hemisphere:
-        // Do NOT rotate character. Move backwards along current facing plus lateral slide.
-        // move = (-|f|)*fwd + (s)*right
-        moveVec
-          .copy(fwd).multiplyScalar(this.speed * mag * f) // f is negative -> backward
-          .addScaledVector(right, this.speed * mag * s);
+        // Move in desired direction scaled by stick magnitude
+        ch.position.addScaledVector(desiredDir, this.speed * mag * dt);
+
+        // Clamp inside terrain bounds
+        ch.position.x = THREE.MathUtils.clamp(ch.position.x, -this.halfX, this.halfX);
+        ch.position.z = THREE.MathUtils.clamp(ch.position.z, -this.halfZ, this.halfZ);
+
+        // Ensure walking loops while moving
+        animator.playWalk();
       }
-
-      // Apply movement
-      ch.position.addScaledVector(moveVec.normalize(), this.speed * mag * dt);
-
-      // Clamp inside terrain bounds
-      ch.position.x = THREE.MathUtils.clamp(ch.position.x, -this.halfX, this.halfX);
-      ch.position.z = THREE.MathUtils.clamp(ch.position.z, -this.halfZ, this.halfZ);
-
-      // Ensure walking loops while moving
-      animator.playWalk();
     } else {
-      // Idle (stop looping)
+      // Idle
       animator.stopAll();
     }
 
