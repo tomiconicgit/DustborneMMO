@@ -31,21 +31,26 @@ export default class ChunkManager {
       try {
         Debugger.log('Building world...');
 
-        // 1) Procedural desert floor first (receives shadows + used by GroundPicker)
+        // 1) Procedural desert floor (receives shadows + used by GroundPicker)
         const ground = TerrainGenerator.create();
         scene.add(ground);
 
-        // 2) Ensure shared pathfinding grid exists
+        // 2) Pathfinding grid
         Pathfinding.create?.();
 
-        // 3) Load authored mining-area and fit it to the 30×30 footprint (no floor inside file)
+        // 3) Load authored mining area, centered + resting on ground; only scale if needed
         try {
-          await TerrainGenerator.loadMiningArea(scene);
+          await TerrainGenerator.loadMiningArea(scene, {
+            autoScale: true,
+            sizeTolerance: 0.12, // 12% tolerance before scaling
+            restOnGround: true,
+            log: true,
+          });
         } catch (err) {
           Debugger.warn('Mining area failed to load; continuing with procedural floor only.', err);
         }
 
-        // 4) Spawn static objects (copper ore, etc.)
+        // 4) Static objects (ores, etc.)
         await this._spawnStaticObjects();
 
         Debugger.log('World build complete.');
@@ -83,12 +88,10 @@ export default class ChunkManager {
         if (o.isMesh || o.isSkinnedMesh) {
           o.castShadow = true;
           o.receiveShadow = true;
+          o.frustumCulled = false;
           if (o.material) {
-            if (Array.isArray(o.material)) {
-              o.material.forEach((m) => m && (m.side = THREE.FrontSide));
-            } else {
-              o.material.side = THREE.FrontSide;
-            }
+            if (Array.isArray(o.material)) o.material.forEach((m) => m && (m.side = THREE.FrontSide));
+            else o.material.side = THREE.FrontSide;
           }
         }
       });
@@ -97,14 +100,14 @@ export default class ChunkManager {
       return root;
     };
 
-    // Holds all static objects; also used by GroundPicker for ore picking
+    // Group for statics (also used by GroundPicker)
     const rootGroup = new THREE.Group();
     rootGroup.name = 'StaticObjects';
     scene.add(rootGroup);
 
     const pf = Pathfinding.main || null;
 
-    // Apply non-walkable tiles (from your dev-marker export)
+    // Apply non-walkables
     if (pf?.grid && Array.isArray(NON_WALKABLE_TILES)) {
       for (let i = 0; i < NON_WALKABLE_TILES.length; i++) {
         const pair = NON_WALKABLE_TILES[i];
@@ -115,7 +118,7 @@ export default class ChunkManager {
       }
     }
 
-    // Place STATIC_OBJECTS (e.g., copper ores)
+    // Place statics
     for (const key in STATIC_OBJECTS) {
       if (!Object.prototype.hasOwnProperty.call(STATIC_OBJECTS, key)) continue;
 
@@ -153,7 +156,6 @@ export default class ChunkManager {
         // Attach mining behavior
         if (type === 'copper-ore') {
           const ore = CopperOre.createFromMesh(inst, tx, tz);
-          // mark all children so GroundPicker can resolve ore from any hit mesh
           inst.traverse((o) => { o.userData = o.userData || {}; o.userData.ore = ore; });
         }
       }
