@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Scene from '../../engine/core/Scene.js';
 import TerrainGenerator from './TerrainGenerator.js';
 import { STATIC_OBJECTS, NON_WALKABLE_TILES } from './StaticObjectMap.js';
-import { TILE_SIZE } from './WorldMap.js';
+import { WORLD_WIDTH, TILE_SIZE } from './WorldMap.js';
 import Pathfinding from '../../engine/lib/Pathfinding.js';
 import CopperOre from '../objects/CopperOre.js';
 import Debugger from '../../debugger.js';
@@ -31,26 +31,42 @@ export default class ChunkManager {
       try {
         Debugger.log('Building world...');
 
-        // 1) Procedural desert floor (receives shadows + used by GroundPicker)
-        const ground = TerrainGenerator.create();
-        scene.add(ground);
+        // ---- 1) Procedural floors ----
+        // Create a group so GroundPicker can raycast both floors at once.
+        const groundGroup = new THREE.Group();
+        groundGroup.name = 'GroundSurfaces';
 
-        // 2) Pathfinding grid
+        // Floor A: original 30x30 at X:[0..30], Z:[0..30]
+        const groundA = TerrainGenerator.create();
+        groundA.name = 'ProceduralGround'; // keep legacy name on the first one
+        groundGroup.add(groundA);
+
+        // Floor B: another 30x30 directly to the RIGHT (+X), i.e., X:[30..60], Z:[0..30]
+        const groundB = TerrainGenerator.create();
+        const width = WORLD_WIDTH * TILE_SIZE; // 30 * 1 = 30 units
+        groundB.position.x += width; // shift by 30 units along X
+        groundB.name = 'ProceduralGround_B';
+        groundGroup.add(groundB);
+
+        // Add both floors to the scene via the group
+        scene.add(groundGroup);
+
+        // ---- 2) Pathfinding grid (still 30x30; second floor is visual-only for now) ----
         Pathfinding.create?.();
 
-        // 3) Load authored mining area, centered + resting on ground; only scale if needed
+        // ---- 3) Authored mining area (centered on the first 30x30) ----
         try {
           await TerrainGenerator.loadMiningArea(scene, {
             autoScale: true,
-            sizeTolerance: 0.12, // 12% tolerance before scaling
+            sizeTolerance: 0.12,
             restOnGround: true,
             log: true,
           });
         } catch (err) {
-          Debugger.warn('Mining area failed to load; continuing with procedural floor only.', err);
+          Debugger.warn('Mining area failed to load; continuing with procedural floors only.', err);
         }
 
-        // 4) Static objects (ores, etc.)
+        // ---- 4) Static objects (ores, etc.) ----
         await this._spawnStaticObjects();
 
         Debugger.log('World build complete.');
