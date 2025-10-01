@@ -12,8 +12,8 @@ export default class GroundPicker {
     this.ray = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
 
-    this.ground = null;
-    this.staticGroup = null; // cache for 'StaticObjects' group
+    this.ground = null;        // can be a mesh OR a group that holds multiple ground meshes
+    this.staticGroup = null;   // cache for 'StaticObjects' group
 
     // Plane fallback at y=0; our world is XZ 0..30 with the plane at y=0.
     this.planeY0 = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -25,8 +25,12 @@ export default class GroundPicker {
     const scene = Scene.main;
     if (!scene) return;
 
+    // Prefer a multi-floor group if it exists, else fall back to the single ground mesh
     if (!this.ground || !this.ground.parent) {
-      this.ground = scene.getObjectByName('ProceduralGround') || null;
+      this.ground =
+        scene.getObjectByName('GroundSurfaces') ||
+        scene.getObjectByName('ProceduralGround') ||
+        null;
     }
     if (!this.staticGroup || !this.staticGroup.parent) {
       this.staticGroup = scene.getObjectByName('StaticObjects') || null;
@@ -79,7 +83,7 @@ export default class GroundPicker {
       }
     }
 
-    // 2) Otherwise, prefer exact ground mesh hit
+    // 2) Try ground meshes (supports either the single mesh or the group with two floors)
     if (this.ground) {
       const hits = this.ray.intersectObject(this.ground, true);
       if (hits && hits.length) return hits[0].point.clone();
