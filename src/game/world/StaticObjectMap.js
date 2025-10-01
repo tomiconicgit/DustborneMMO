@@ -4,15 +4,17 @@
 // Each object is placed at the tile center; the GLB's baked Y is preserved.
 
 export const STATIC_OBJECTS = {
-  // Exactly 3 copper rocks
-  '22,21': [ { type: 'copper-ore', yaw:  0.35 } ],
-  '21,22': [ { type: 'copper-ore', yaw: -0.75 } ],
-  '20,23': [ { type: 'copper-ore', yaw:  1.20 } ],
+  // 6 copper rocks, with a 1-tile gap around each one.
+  '12,12': [ { type: 'copper-ore', yaw: -0.35 } ],
+  '14,12': [ { type: 'copper-ore', yaw:  0.55 } ],
+  '16,12': [ { type: 'copper-ore', yaw:  1.20 } ],
+  '12,14': [ { type: 'copper-ore', yaw:  2.10 } ],
+  '14,16': [ { type: 'copper-ore', yaw: -1.10 } ],
+  '16,16': [ { type: 'copper-ore', yaw:  2.75 } ],
 };
 
 // Tiles that should NOT be walkable (x,z pairs)
 export const NON_WALKABLE_TILES = [
-  // --- Existing non-walkables ---
   [14,6],[17,5],[18,5],[19,5],[20,5],[21,5],[22,5],[23,5],[24,5],[25,5],[26,5],[27,5],
   [27,3],[26,3],[26,2],[27,1],[27,2],[27,4],[26,4],[25,4],[25,3],[25,2],[26,1],[25,1],
   [24,1],[24,2],[24,3],[24,4],[15,3],[14,2],[14,3],[13,4],[14,4],[15,4],[14,5],[15,5],
@@ -40,7 +42,4 @@ export const NON_WALKABLE_TILES = [
   [23,19],[23,20],[22,20],[22,19],[23,23],[24,21],[24,22],[24,20],[24,23],[22,23],
   [23,22],[22,22],[22,24],[21,24],[20,24],[19,24],[18,24],[18,22],[18,23],[17,24],
   [16,24],[15,23],[15,24],[10,6],
-
-  // --- Non-walkable tiles for the 3 current copper nodes ---
-  [22,21],[21,22],[20,23],
 ];
