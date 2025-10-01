@@ -13,7 +13,7 @@ export default class Camera {
   constructor() {
     this.worldMinX = 0;
     this.worldMinZ = 0;
-    this.worldMaxX = WORLD_WIDTH * TILE_SIZE;   // 30
+    this.worldMaxX = WORLD_WIDTH * TILE_SIZE;   // now 60
     this.worldMaxZ = WORLD_DEPTH * TILE_SIZE;   // 30
 
     this.threeCamera = new THREE.PerspectiveCamera(
