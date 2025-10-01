@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import Scene from '../../engine/core/Scene.js';
 import TerrainGenerator from './TerrainGenerator.js';
 import { STATIC_OBJECTS, NON_WALKABLE_TILES } from './StaticObjectMap.js';
-import { WORLD_WIDTH, TILE_SIZE } from './WorldMap.js';
+import { TILE_SIZE } from './WorldMap.js';
 import Pathfinding from '../../engine/lib/Pathfinding.js';
 import CopperOre from '../objects/CopperOre.js';
 import Debugger from '../../debugger.js';
@@ -31,42 +31,28 @@ export default class ChunkManager {
       try {
         Debugger.log('Building world...');
 
-        // ---- 1) Procedural floors ----
-        // Create a group so GroundPicker can raycast both floors at once.
-        const groundGroup = new THREE.Group();
-        groundGroup.name = 'GroundSurfaces';
+        // 1) One big procedural ground (now 60×30)
+        const ground = TerrainGenerator.create();
+        scene.add(ground);
 
-        // Floor A: original 30x30 at X:[0..30], Z:[0..30]
-        const groundA = TerrainGenerator.create();
-        groundA.name = 'ProceduralGround'; // keep legacy name on the first one
-        groundGroup.add(groundA);
-
-        // Floor B: another 30x30 directly to the RIGHT (+X), i.e., X:[30..60], Z:[0..30]
-        const groundB = TerrainGenerator.create();
-        const width = WORLD_WIDTH * TILE_SIZE; // 30 * 1 = 30 units
-        groundB.position.x += width; // shift by 30 units along X
-        groundB.name = 'ProceduralGround_B';
-        groundGroup.add(groundB);
-
-        // Add both floors to the scene via the group
-        scene.add(groundGroup);
-
-        // ---- 2) Pathfinding grid (still 30x30; second floor is visual-only for now) ----
+        // 2) Pathfinding grid for whole world
         Pathfinding.create?.();
 
-        // ---- 3) Authored mining area (centered on the first 30x30) ----
+        // 3) Authored mining area on the LEFT 30×30 (x:0..30, z:0..30)
         try {
           await TerrainGenerator.loadMiningArea(scene, {
-            autoScale: true,
-            sizeTolerance: 0.12,
+            targetWidth: 30 * TILE_SIZE,
+            targetDepth: 30 * TILE_SIZE,
+            anchorOffsetX: 0,
+            anchorOffsetZ: 0,
             restOnGround: true,
-            log: true,
+            log: false,
           });
         } catch (err) {
-          Debugger.warn('Mining area failed to load; continuing with procedural floors only.', err);
+          Debugger.warn('Mining area failed to load; continuing with procedural floor only.', err);
         }
 
-        // ---- 4) Static objects (ores, etc.) ----
+        // 4) Static objects (ores) and walkability
         await this._spawnStaticObjects();
 
         Debugger.log('World build complete.');
@@ -157,7 +143,7 @@ export default class ChunkManager {
         const inst = proto.clone(true);
         inst.name = `${type}-${tx}-${tz}-${i}`;
 
-        // Tile center in world units; keep authored Y
+        // Tile center in world units; keep authored Y from the GLB
         const worldX = (tx + 0.5) * TILE_SIZE;
         const worldZ = (tz + 0.5) * TILE_SIZE;
         inst.position.set(worldX, inst.position.y, worldZ);
